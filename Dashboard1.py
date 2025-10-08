@@ -254,13 +254,13 @@ if "df" in st.session_state and not st.session_state.df.empty:
             lon_range = df_plot["longitude"].max() - df_plot["longitude"].min()
 
             if lat_range < 0.1 and lon_range < 0.1:
-                zoom_auto = 12
+                zoom_auto = 15
             elif lat_range < 1 and lon_range < 1:
-                zoom_auto = 9
+                zoom_auto = 14
             elif lat_range < 5 and lon_range < 5:
-                zoom_auto = 7
+                zoom_auto = 12
             else:
-                zoom_auto = 5
+                zoom_auto = 10
 
             # Slider de zoom manual
             zoom_user = st.sidebar.slider("🔍 Nivel de zoom del mapa", 3, 15, int(zoom_auto))
@@ -307,6 +307,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene columnas 'latitude' y 'longitude'.")
 else:
     st.info("👈 Consulta primero la API para visualizar el mapa.")
+
 
 
 
