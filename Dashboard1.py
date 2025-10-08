@@ -4,6 +4,8 @@ import plotly.express as px
 import requests
 import json
 from io import StringIO
+from datetime import datetime, timedelta
+import pytz
 
 # ===========================================================
 # 🧠 CONFIGURACIÓN INICIAL
@@ -176,6 +178,7 @@ if not df.empty:
         st.dataframe(subset)
 else:
     st.info("👈 Configura y presiona **Consultar API** para ver los resultados.")
+
 
 
 
