@@ -140,7 +140,7 @@ body = {
     "tsEnd": ts_end,
     "format": "raw",
     "programs": programas,
-    "probes": probes,
+    "probes": ",".join(map(str, probes)),
 }
 
 # ===========================================================
@@ -271,6 +271,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.info("ℹ️ Este dataset no contiene columnas 'latitude' y 'longitude'.")
 else:
     st.info("👈 Consulta datos primero para ver el mapa.")
+
 
 
 
