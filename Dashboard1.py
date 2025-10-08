@@ -228,41 +228,41 @@ import plotly.express as px
 
 st.markdown("## 🗺️ Mapa de mediciones")
 
-st.write("🧭 Columnas disponibles en df:", df.columns.tolist())
+# Crear copia del dataframe
+df_plot = df.copy()
 
-# Detectar columnas de coordenadas automáticamente
-posibles_lat = [c for c in df.columns if "lat" in c.lower()]
-posibles_lon = [c for c in df.columns if "lon" in c.lower()]
+# Asegurarse de que las coordenadas sean numéricas
+df_plot["latitude"] = pd.to_numeric(df_plot["latitude"], errors="coerce")
+df_plot["longitude"] = pd.to_numeric(df_plot["longitude"], errors="coerce")
 
-if posibles_lat and posibles_lon:
-    lat_col = posibles_lat[0]
-    lon_col = posibles_lon[0]
+# Eliminar filas sin coordenadas válidas
+df_plot = df_plot.dropna(subset=["latitude", "longitude"])
 
-    df_plot = df.copy()
+if not df_plot.empty:
+    fig = px.scatter_mapbox(
+        df_plot,
+        lat="latitude",
+        lon="longitude",
+        color="isp",  # puedes cambiar por 'provider' o 'subtechnology'
+        hover_data=[
+            "probeId",
+            "provider",
+            "subtechnology",
+            "avgLatency",
+            "region",
+            "city",
+            "dateStart",
+            "dateEnd",
+        ],
+        zoom=6,
+        height=650,
+    )
 
-    # Convertir a numérico y limpiar
-    df_plot[lat_col] = pd.to_numeric(df_plot[lat_col], errors="coerce")
-    df_plot[lon_col] = pd.to_numeric(df_plot[lon_col], errors="coerce")
-    df_plot = df_plot.dropna(subset=[lat_col, lon_col])
+    fig.update_layout(
+        mapbox_style="open-street-map",
+        margin={"r": 0, "t": 0, "l": 0, "b": 0},
+    )
 
-    if not df_plot.empty:
-        fig = px.scatter_mapbox(
-            df_plot,
-            lat=lat_col,
-            lon=lon_col,
-            color="program" if "program" in df_plot.columns else None,
-            hover_data=df_plot.columns,
-            zoom=6,
-            height=600,
-        )
-
-        fig.update_layout(
-            mapbox_style="open-street-map",
-            margin={"r": 0, "t": 0, "l": 0, "b": 0},
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("⚠️ No hay registros válidos con coordenadas.")
+    st.plotly_chart(fig, use_container_width=True)
 else:
-    st.warning("⚠️ No se encontraron columnas con nombres que contengan 'lat' y 'lon'.")
+    st.warning("⚠️ No hay registros válidos con coordenadas (latitude / longitude).")
