@@ -89,14 +89,18 @@ if st.sidebar.button("🚀 Consultar API"):
     # 🔹 Procesamiento
     # =======================================================
     def flatten_results(raw_json):
-        rows = []
-        for program, results in raw_json.items():
-            for item in results[:10]:  # mostrar 10 por programa
-                flat = {"program": program}
-                if isinstance(item, dict):
-                    flat.update(item)
-                rows.append(flat)
-        return pd.DataFrame(rows)
+    rows = []
+    for program, results in raw_json.items():
+        # Saltar si no es lista o viene vacío
+        if not isinstance(results, list) or len(results) == 0:
+            continue
+        for item in results[:10]:  # mostrar solo los primeros 10
+            flat = {"program": program}
+            if isinstance(item, dict):
+                flat.update(item)
+            rows.append(flat)
+    return pd.DataFrame(rows)
+
 
     df = flatten_results(data)
 
@@ -136,3 +140,4 @@ if st.sidebar.button("🚀 Consultar API"):
 
 else:
     st.info("👈 Configura y presiona **Consultar API** para ver los resultados.")
+
