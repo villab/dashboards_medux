@@ -94,9 +94,10 @@ if st.sidebar.button("🚀 Consultar API"):
     def flatten_results(raw_json):
         rows = []
         for program, results in raw_json.items():
+            # Verifica que sea lista y tenga datos
             if not isinstance(results, list) or len(results) == 0:
                 continue
-            for item in results[:10]:
+            for item in results:  # 👈 sin [:10], trae todo
                 flat = {"program": program}
                 if isinstance(item, dict):
                     flat.update(item)
@@ -147,3 +148,4 @@ if not df.empty:
         st.dataframe(subset)
 else:
     st.info("👈 Configura y presiona **Consultar API** para ver los resultados.")
+
