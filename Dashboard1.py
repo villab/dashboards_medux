@@ -52,46 +52,67 @@ programas = st.sidebar.multiselect(
     ["http-upload-burst-test", "http-down-burst-test", "ping-test"],
     default=["ping-test"]
 )
+#------------------opciones de fecha------------------
+from datetime import datetime, timedelta
+import pytz
+import streamlit as st
 
-st.sidebar.markdown("---")
-st.sidebar.header("📅 Rango de fechas y horas (hora local)")
-
-# Zona horaria local (Colombia = UTC-5)
+# ---------- Zona local ----------
 zona_local = pytz.timezone("America/Bogota")
 
-# Hora actual local y rango por defecto (últimas 24 h)
+# ---------- Defaults (hora local) ----------
 ahora_local = datetime.now(zona_local)
 inicio_defecto_local = ahora_local - timedelta(days=1)
 
-# Selectores de fecha y hora
+# IMPORTANT: crear time defaults SIN tzinfo (naive), para que st.time_input funcione bien
+default_time_start = inicio_defecto_local.time().replace(tzinfo=None)
+default_time_end = ahora_local.time().replace(tzinfo=None)
+
+st.sidebar.markdown("---")
+st.sidebar.header("📅 Rango de fecha y hora (hora local)")
+
+# ---------- Selectores (date_input + time_input) ----------
 fecha_inicio = st.sidebar.date_input("Fecha de inicio", inicio_defecto_local.date())
-hora_inicio = st.sidebar.time_input("Hora de inicio", inicio_defecto_local.time())
+hora_inicio = st.sidebar.time_input("Hora de inicio", default_time_start)
 
 fecha_fin = st.sidebar.date_input("Fecha de fin", ahora_local.date())
-hora_fin = st.sidebar.time_input("Hora de fin", ahora_local.time())
+hora_fin = st.sidebar.time_input("Hora de fin", default_time_end)
 
-# Combinar fecha y hora → datetime local
-dt_inicio_local = zona_local.localize(datetime.combine(fecha_inicio, hora_inicio))
-dt_fin_local = zona_local.localize(datetime.combine(fecha_fin, hora_fin))
+# ---------- Combinar en naive datetimes y luego localizarlos ----------
+dt_inicio_naive = datetime.combine(fecha_inicio, hora_inicio)
+dt_fin_naive = datetime.combine(fecha_fin, hora_fin)
 
-# Validar rango
+# Localizar (attach tz) usando pytz
+try:
+    dt_inicio_local = zona_local.localize(dt_inicio_naive)
+    dt_fin_local = zona_local.localize(dt_fin_naive)
+except Exception as e:
+    st.error(f"Error localizando fecha/hora: {e}")
+    st.stop()
+
+# Validación
 if dt_inicio_local >= dt_fin_local:
     st.error("⚠️ La fecha/hora de inicio no puede ser posterior o igual a la de fin.")
     st.stop()
 
-# Convertir a UTC
+# Convertir a UTC y a timestamps en ms para la API
 dt_inicio_utc = dt_inicio_local.astimezone(pytz.utc)
 dt_fin_utc = dt_fin_local.astimezone(pytz.utc)
 
-# Convertir a timestamp (ms)
 ts_start = int(dt_inicio_utc.timestamp() * 1000)
 ts_end = int(dt_fin_utc.timestamp() * 1000)
 
-# Mostrar resumen
+# Mostrar resumen (útil para debug)
 st.sidebar.markdown("### 🕒 Rango seleccionado")
 st.sidebar.write(f"Inicio local: {dt_inicio_local.strftime('%Y-%m-%d %H:%M:%S')}")
 st.sidebar.write(f"Fin local: {dt_fin_local.strftime('%Y-%m-%d %H:%M:%S')}")
-st.sidebar.caption(f"→ Convertido a UTC: {dt_inicio_utc.strftime('%Y-%m-%d %H:%M:%S')} a {dt_fin_utc.strftime('%Y-%m-%d %H:%M:%S')}")
+st.sidebar.caption(
+    f"Convertido a UTC: {dt_inicio_utc.strftime('%Y-%m-%d %H:%M:%S')} → {dt_fin_utc.strftime('%Y-%m-%d %H:%M:%S')}"
+)
+
+# (Opcional) debug para comprobar tipos
+# st.sidebar.write(f"tipo hora_inicio: {type(hora_inicio)}, tzinfo: {hora_inicio.tzinfo}")
+
 url = "https://medux-ids.caseonit.com/api/results"
 headers = {
     "Authorization": f"Bearer {token}",
@@ -186,6 +207,7 @@ if not df.empty:
         st.dataframe(subset)
 else:
     st.info("👈 Configura y presiona **Consultar API** para ver los resultados.")
+
 
 
 
