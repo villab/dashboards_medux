@@ -228,67 +228,75 @@ else:
     st.info("👈 Configura y presiona **Consultar API** para ver los resultados.")
 
 import plotly.express as px
-# ===============================
-# 🌍 Gráfico tipo mapa (Plotly Mapbox)
-# ===============================
 
-if "latitude" in df_plot.columns and "longitude" in df_plot.columns:
-    # Convertir coordenadas a numéricas
-    df_plot["latitude"] = pd.to_numeric(df_plot["latitude"], errors="coerce")
-    df_plot["longitude"] = pd.to_numeric(df_plot["longitude"], errors="coerce")
+# ===========================================================
+# 🌍 Mapa de mediciones
+# ===========================================================
+st.markdown("## 🗺️ Mapa de mediciones")
 
-    # Eliminar filas sin coordenadas válidas
-    df_plot = df_plot.dropna(subset=["latitude", "longitude"])
+# Verificar que haya datos
+if "df" in st.session_state and not st.session_state.df.empty:
+    df_plot = st.session_state.df.copy()
 
-    if not df_plot.empty:
-        # Calcular límites geográficos
-        min_lat, max_lat = df_plot["latitude"].min(), df_plot["latitude"].max()
-        min_lon, max_lon = df_plot["longitude"].min(), df_plot["longitude"].max()
-        centro_lat = (min_lat + max_lat) / 2
-        centro_lon = (min_lon + max_lon) / 2
+    # Asegurarse de que las coordenadas existan
+    if "latitude" in df_plot.columns and "longitude" in df_plot.columns:
+        # Convertir coordenadas a numéricas
+        df_plot["latitude"] = pd.to_numeric(df_plot["latitude"], errors="coerce")
+        df_plot["longitude"] = pd.to_numeric(df_plot["longitude"], errors="coerce")
 
-        # Calcular dispersión
-        lat_range = max_lat - min_lat
-        lon_range = max_lon - min_lon
+        # Eliminar filas sin coordenadas válidas
+        df_plot = df_plot.dropna(subset=["latitude", "longitude"])
 
-        # Zoom automático con límites
-        if lat_range < 0.1 and lon_range < 0.1:
-            zoom_auto = 12
-        elif lat_range < 1 and lon_range < 1:
-            zoom_auto = 9
-        elif lat_range < 5 and lon_range < 5:
-            zoom_auto = 7
+        if not df_plot.empty:
+            # Calcular límites geográficos
+            min_lat, max_lat = df_plot["latitude"].min(), df_plot["latitude"].max()
+            min_lon, max_lon = df_plot["longitude"].min(), df_plot["longitude"].max()
+            centro_lat = (min_lat + max_lat) / 2
+            centro_lon = (min_lon + max_lon) / 2
+
+            # Calcular dispersión
+            lat_range = max_lat - min_lat
+            lon_range = max_lon - min_lon
+
+            # Zoom automático con límites
+            if lat_range < 0.1 and lon_range < 0.1:
+                zoom_auto = 12
+            elif lat_range < 1 and lon_range < 1:
+                zoom_auto = 9
+            elif lat_range < 5 and lon_range < 5:
+                zoom_auto = 7
+            else:
+                zoom_auto = 5
+
+            # 🔍 Selector de zoom manual
+            zoom_user = st.sidebar.slider("🔍 Nivel de zoom del mapa", 3, 15, int(zoom_auto))
+
+            # Crear el mapa con Plotly Express
+            fig = px.scatter_mapbox(
+                df_plot,
+                lat="latitude",
+                lon="longitude",
+                color="program",  # puedes cambiar por otra columna
+                hover_name="program",
+                hover_data={"latitude": True, "longitude": True, "city": True, "isp": True},
+                color_discrete_sequence=px.colors.qualitative.Bold,
+                height=600,
+            )
+
+            fig.update_layout(
+                mapbox_style="open-street-map",
+                mapbox_center={"lat": centro_lat, "lon": centro_lon},
+                mapbox_zoom=zoom_user,
+                margin={"r": 0, "t": 0, "l": 0, "b": 0},
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
         else:
-            zoom_auto = 5
-
-        # 🔍 Selector de zoom manual
-        zoom_user = st.sidebar.slider("🔍 Nivel de zoom del mapa", 3, 15, int(zoom_auto))
-
-        # Crear el mapa con Plotly Express
-        fig = px.scatter_mapbox(
-            df_plot,
-            lat="latitude",
-            lon="longitude",
-            color="program",  # puedes cambiar por otra columna
-            hover_name="program",
-            hover_data={"latitude": True, "longitude": True, "city": True, "isp": True},
-            color_discrete_sequence=px.colors.qualitative.Bold,
-            height=600,
-        )
-
-        fig.update_layout(
-            mapbox_style="open-street-map",
-            mapbox_center={"lat": centro_lat, "lon": centro_lon},
-            mapbox_zoom=zoom_user,
-            margin={"r": 0, "t": 0, "l": 0, "b": 0},
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
+            st.warning("⚠️ No hay coordenadas válidas para mostrar en el mapa.")
     else:
-        st.warning("⚠️ No hay coordenadas válidas para mostrar en el mapa.")
+        st.warning("⚠️ El dataset no contiene columnas 'latitude' y 'longitude'.")
 else:
-    st.warning("⚠️ El dataset no contiene columnas 'latitude' y 'longitude'.")
-
+    st.info("👈 Primero realiza una consulta para visualizar el mapa.")
 
 
 
