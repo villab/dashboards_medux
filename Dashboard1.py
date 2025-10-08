@@ -230,7 +230,7 @@ else:
 import plotly.express as px
 
 # ===========================================================
-# 🌍 Mapa de mediciones (Plotly Mapbox)
+# 🌍 Mapa de mediciones centrado en la última coordenada
 # ===========================================================
 st.markdown("## 🗺️ Mapa de mediciones")
 
@@ -244,17 +244,15 @@ if "df" in st.session_state and not st.session_state.df.empty:
         df_plot = df_plot.dropna(subset=["latitude", "longitude"])
 
         if not df_plot.empty:
-            # Calcular límites geográficos para centrar
-            min_lat, max_lat = df_plot["latitude"].min(), df_plot["latitude"].max()
-            min_lon, max_lon = df_plot["longitude"].min(), df_plot["longitude"].max()
-            centro_lat = (min_lat + max_lat) / 2
-            centro_lon = (min_lon + max_lon) / 2
+            # 📌 Centrar en la última coordenada
+            ultimo_punto = df_plot.iloc[-1]
+            centro_lat = ultimo_punto["latitude"]
+            centro_lon = ultimo_punto["longitude"]
 
-            # Calcular dispersión
-            lat_range = max_lat - min_lat
-            lon_range = max_lon - min_lon
+            # Calcular dispersión para zoom automático
+            lat_range = df_plot["latitude"].max() - df_plot["latitude"].min()
+            lon_range = df_plot["longitude"].max() - df_plot["longitude"].min()
 
-            # Zoom automático con límites
             if lat_range < 0.1 and lon_range < 0.1:
                 zoom_auto = 12
             elif lat_range < 1 and lon_range < 1:
@@ -277,7 +275,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
             else:
                 color_col = None
 
-            # Seleccionar columnas existentes para hover
+            # Columnas existentes para hover
             hover_cols = [c for c in ["latitude", "longitude", "city", "isp", "provider", "subtechnology", "avgLatency"] if c in df_plot.columns]
             hover_name_col = "program" if "program" in df_plot.columns else None
 
@@ -301,7 +299,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
             )
 
             st.plotly_chart(fig, use_container_width=True)
-            st.caption(f"🗺️ Centro: ({centro_lat:.4f}, {centro_lon:.4f}) | Zoom: {zoom_user}")
+            st.caption(f"🗺️ Última medición: ({centro_lat:.4f}, {centro_lon:.4f}) | Zoom: {zoom_user}")
 
         else:
             st.warning("⚠️ No hay coordenadas válidas para mostrar en el mapa.")
@@ -309,6 +307,8 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene columnas 'latitude' y 'longitude'.")
 else:
     st.info("👈 Consulta primero la API para visualizar el mapa.")
+
+
 
 
 
