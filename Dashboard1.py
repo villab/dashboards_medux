@@ -229,8 +229,6 @@ else:
 
 import plotly.express as px
 
-st.markdown("## 🗺️ Mapa de mediciones")
-
 # ===========================================================
 # 🗺️ Mapa de mediciones
 # ===========================================================
@@ -239,34 +237,38 @@ st.markdown("## 🗺️ Mapa de mediciones")
 if "df" in st.session_state and not st.session_state.df.empty:
     df_plot = st.session_state.df.copy()
 
-    # Asegurarse de que existan columnas de coordenadas
     if "latitude" in df_plot.columns and "longitude" in df_plot.columns:
         df_plot["latitude"] = pd.to_numeric(df_plot["latitude"], errors="coerce")
         df_plot["longitude"] = pd.to_numeric(df_plot["longitude"], errors="coerce")
-
-        # Eliminar filas sin coordenadas válidas
         df_plot = df_plot.dropna(subset=["latitude", "longitude"])
 
         if not df_plot.empty:
-            # Calcular centro del mapa automáticamente
-            centro_lat = df_plot["latitude"].mean()
-            centro_lon = df_plot["longitude"].mean()
+            # Calcular límites geográficos (para centrar y ajustar zoom)
+            min_lat, max_lat = df_plot["latitude"].min(), df_plot["latitude"].max()
+            min_lon, max_lon = df_plot["longitude"].min(), df_plot["longitude"].max()
+            centro_lat = (min_lat + max_lat) / 2
+            centro_lon = (min_lon + max_lon) / 2
 
-            # Determinar columna de color (usa isp si existe, si no, otra)
+            # Calcular zoom automático según dispersión
+            lat_range = max_lat - min_lat
+            lon_range = max_lon - min_lon
+            # fórmula empírica para estimar zoom (ajustable)
+            zoom_auto = max(3, 11 - max(lat_range, lon_range) * 10)
+
             color_col = (
                 "isp"
                 if "isp" in df_plot.columns
                 else ("provider" if "provider" in df_plot.columns else None)
             )
 
-            # Crear figura con zoom alto (por defecto 11)
             fig = px.scatter_mapbox(
                 df_plot,
                 lat="latitude",
                 lon="longitude",
                 color=color_col,
                 hover_data=[
-                    c for c in [
+                    c
+                    for c in [
                         "probeId",
                         "provider",
                         "subtechnology",
@@ -275,20 +277,23 @@ if "df" in st.session_state and not st.session_state.df.empty:
                         "city",
                         "dateStart",
                         "dateEnd",
-                    ] if c in df_plot.columns
+                    ]
+                    if c in df_plot.columns
                 ],
-                zoom=11,
                 height=650,
             )
 
-            # Configuración visual del mapa
             fig.update_layout(
                 mapbox_style="open-street-map",
                 mapbox_center={"lat": centro_lat, "lon": centro_lon},
+                mapbox_zoom=zoom_auto,  # 👈 zoom dinámico según el rango
                 margin={"r": 0, "t": 0, "l": 0, "b": 0},
             )
 
             st.plotly_chart(fig, use_container_width=True)
+
+            st.caption(f"🗺️ Centro del mapa: ({centro_lat:.4f}, {centro_lon:.4f}) | Zoom automático: {zoom_auto:.1f}")
+
         else:
             st.warning("⚠️ No hay registros válidos con coordenadas (latitude / longitude).")
     else:
