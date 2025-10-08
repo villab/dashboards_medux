@@ -51,28 +51,39 @@ programas = st.sidebar.multiselect(
     default=["ping-test"]
 )
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 
 st.sidebar.markdown("---")
-st.sidebar.header("📅 Rango de fechas")
+st.sidebar.header("📅 Rango de fechas y horas")
 
-# Fecha actual y rango por defecto
-fecha_hoy = datetime.utcnow()
-fecha_inicio_defecto = fecha_hoy - timedelta(days=1)
-fecha_fin_defecto = fecha_hoy
+# 🔹 Valores por defecto (últimas 24 horas)
+ahora = datetime.utcnow()
+inicio_defecto = ahora - timedelta(days=1)
+fin_defecto = ahora
 
-# Selector de fechas amigable
-fecha_inicio = st.sidebar.date_input("Fecha de inicio", fecha_inicio_defecto)
-fecha_fin = st.sidebar.date_input("Fecha de fin", fecha_fin_defecto)
+# 🔹 Selector de fechas
+fecha_inicio = st.sidebar.date_input("Fecha de inicio", inicio_defecto.date())
+hora_inicio = st.sidebar.time_input("Hora de inicio", inicio_defecto.time())
 
-# Validación
-if fecha_inicio > fecha_fin:
-    st.error("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin.")
+fecha_fin = st.sidebar.date_input("Fecha de fin", fin_defecto.date())
+hora_fin = st.sidebar.time_input("Hora de fin", fin_defecto.time())
+
+# 🔹 Combinar fecha + hora
+dt_inicio = datetime.combine(fecha_inicio, hora_inicio)
+dt_fin = datetime.combine(fecha_fin, hora_fin)
+
+# 🔹 Validación lógica
+if dt_inicio >= dt_fin:
+    st.error("⚠️ La fecha/hora de inicio no puede ser posterior o igual a la de fin.")
     st.stop()
 
-# Convertir a timestamps (en milisegundos)
-ts_start = int(datetime.combine(fecha_inicio, datetime.min.time()).timestamp() * 1000)
-ts_end = int(datetime.combine(fecha_fin, datetime.max.time()).timestamp() * 1000)
+# 🔹 Conversión a timestamp en milisegundos (para API)
+ts_start = int(dt_inicio.timestamp() * 1000)
+ts_end = int(dt_fin.timestamp() * 1000)
+
+st.sidebar.write("🕒 Timestamp inicio:", ts_start)
+st.sidebar.write("🕒 Timestamp fin:", ts_end)
+
 
 
 url = "https://medux-ids.caseonit.com/api/results"
@@ -169,5 +180,6 @@ if not df.empty:
         st.dataframe(subset)
 else:
     st.info("👈 Configura y presiona **Consultar API** para ver los resultados.")
+
 
 
