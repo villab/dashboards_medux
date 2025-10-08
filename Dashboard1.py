@@ -236,52 +236,66 @@ st.markdown("## 🗺️ Mapa de mediciones")
 # ===========================================================
 st.markdown("## 🗺️ Mapa de mediciones")
 
-# Crear copia del dataframe
-df_plot = df.copy()
+if "df" in st.session_state and not st.session_state.df.empty:
+    df_plot = st.session_state.df.copy()
 
-# Asegurarse de que las coordenadas sean numéricas
-df_plot["latitude"] = pd.to_numeric(df_plot["latitude"], errors="coerce")
-df_plot["longitude"] = pd.to_numeric(df_plot["longitude"], errors="coerce")
+    # Asegurarse de que existan columnas de coordenadas
+    if "latitude" in df_plot.columns and "longitude" in df_plot.columns:
+        df_plot["latitude"] = pd.to_numeric(df_plot["latitude"], errors="coerce")
+        df_plot["longitude"] = pd.to_numeric(df_plot["longitude"], errors="coerce")
 
-# Eliminar filas sin coordenadas válidas
-df_plot = df_plot.dropna(subset=["latitude", "longitude"])
+        # Eliminar filas sin coordenadas válidas
+        df_plot = df_plot.dropna(subset=["latitude", "longitude"])
 
-if not df_plot.empty:
-    # Calcular centro del mapa automáticamente
-    centro_lat = df_plot["latitude"].mean()
-    centro_lon = df_plot["longitude"].mean()
+        if not df_plot.empty:
+            # Calcular centro del mapa automáticamente
+            centro_lat = df_plot["latitude"].mean()
+            centro_lon = df_plot["longitude"].mean()
 
-    # Crear figura con zoom alto (por defecto 11 → vista de ciudad)
-    fig = px.scatter_mapbox(
-        df_plot,
-        lat="latitude",
-        lon="longitude",
-        color="isp",  # puedes cambiar por 'provider' o 'subtechnology'
-        hover_data=[
-            "probeId",
-            "provider",
-            "subtechnology",
-            "avgLatency",
-            "region",
-            "city",
-            "dateStart",
-            "dateEnd",
-        ],
-        zoom=11,       # 👈 nivel de zoom por defecto
-        height=650,
-    )
+            # Determinar columna de color (usa isp si existe, si no, otra)
+            color_col = (
+                "isp"
+                if "isp" in df_plot.columns
+                else ("provider" if "provider" in df_plot.columns else None)
+            )
 
-    # Configuración visual del mapa
-    fig.update_layout(
-        mapbox_style="open-street-map",
-        mapbox_center={"lat": centro_lat, "lon": centro_lon},  # 👈 centrado automático
-        margin={"r": 0, "t": 0, "l": 0, "b": 0},
-    )
+            # Crear figura con zoom alto (por defecto 11)
+            fig = px.scatter_mapbox(
+                df_plot,
+                lat="latitude",
+                lon="longitude",
+                color=color_col,
+                hover_data=[
+                    c for c in [
+                        "probeId",
+                        "provider",
+                        "subtechnology",
+                        "avgLatency",
+                        "region",
+                        "city",
+                        "dateStart",
+                        "dateEnd",
+                    ] if c in df_plot.columns
+                ],
+                zoom=11,
+                height=650,
+            )
 
-    # Mostrar mapa
-    st.plotly_chart(fig, use_container_width=True)
+            # Configuración visual del mapa
+            fig.update_layout(
+                mapbox_style="open-street-map",
+                mapbox_center={"lat": centro_lat, "lon": centro_lon},
+                margin={"r": 0, "t": 0, "l": 0, "b": 0},
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("⚠️ No hay registros válidos con coordenadas (latitude / longitude).")
+    else:
+        st.warning("⚠️ El conjunto de datos no contiene columnas 'latitude' y 'longitude'.")
 else:
-    st.warning("⚠️ No hay registros válidos con coordenadas (latitude / longitude).")
+    st.info("👈 Consulta primero la API para visualizar el mapa.")
+
 
 
 
