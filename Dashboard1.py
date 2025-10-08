@@ -81,10 +81,6 @@ if dt_inicio >= dt_fin:
 ts_start = int(dt_inicio.timestamp() * 1000)
 ts_end = int(dt_fin.timestamp() * 1000)
 
-st.sidebar.write("🕒 Timestamp inicio:", ts_start)
-st.sidebar.write("🕒 Timestamp fin:", ts_end)
-
-
 
 url = "https://medux-ids.caseonit.com/api/results"
 headers = {
@@ -180,6 +176,7 @@ if not df.empty:
         st.dataframe(subset)
 else:
     st.info("👈 Configura y presiona **Consultar API** para ver los resultados.")
+
 
 
 
