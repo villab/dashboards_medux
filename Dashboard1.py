@@ -224,6 +224,45 @@ if not df.empty:
 else:
     st.info("👈 Configura y presiona **Consultar API** para ver los resultados.")
 
+import plotly.express as px
+import streamlit as st
+
+st.markdown("## 🗺️ Mapa de mediciones")
+
+# Validar si hay coordenadas
+if "latitude" in df.columns and "longitude" in df.columns:
+    # Filtro por programa (opcional)
+    programas_disponibles = sorted(df["program"].unique())
+    programa_sel = st.selectbox("Filtrar por programa", ["Todos"] + list(programas_disponibles))
+
+    if programa_sel != "Todos":
+        df_plot = df[df["program"] == programa_sel]
+    else:
+        df_plot = df.copy()
+
+    # Crear figura con Plotly
+    fig = px.scatter_mapbox(
+        df_plot,
+        lat="latitude",
+        lon="longitude",
+        color="program",  # o "result_value"
+        size_max=12,
+        zoom=6,
+        height=600,
+        hover_data=["probe", "result_value", "timestamp"],
+        color_discrete_sequence=px.colors.qualitative.Bold,
+    )
+
+    fig.update_layout(
+        mapbox_style="open-street-map",
+        margin={"r": 0, "t": 0, "l": 0, "b": 0},
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+else:
+    st.warning("⚠️ No se encontraron columnas 'latitude' y 'longitude' en los datos.")
+
 
 
 
