@@ -124,4 +124,15 @@ if st.sidebar.button("🚀 Consultar API"):
     # =======================================================
     if tipo == "scatter":
         fig = px.scatter(subset, x=eje_x, y=eje_y, title=f"{programa}: {eje_y} vs {eje_x}")
-    elif tipo
+    elif tipo == "line":
+        fig = px.line(subset, x=eje_x, y=eje_y, title=f"{programa}: {eje_y} vs {eje_x}")
+    else:
+        fig = px.bar(subset, x=eje_x, y=eje_y, title=f"{programa}: {eje_y} vs {eje_x}")
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    with st.expander("📄 Ver datos"):
+        st.dataframe(subset)
+
+else:
+    st.info("👈 Configura y presiona **Consultar API** para ver los resultados.")
