@@ -53,37 +53,45 @@ programas = st.sidebar.multiselect(
     default=["ping-test"]
 )
 
-from datetime import datetime, timedelta, time
-
 st.sidebar.markdown("---")
-st.sidebar.header("📅 Rango de fechas y horas")
+st.sidebar.header("📅 Rango de fechas y horas (hora local)")
 
-# 🔹 Valores por defecto (últimas 24 horas)
-ahora = datetime.utcnow()
-inicio_defecto = ahora - timedelta(days=1)
-fin_defecto = ahora
+# Zona horaria local (Colombia = UTC-5)
+zona_local = pytz.timezone("America/Bogota")
 
-# 🔹 Selector de fechas
-fecha_inicio = st.sidebar.date_input("Fecha de inicio", inicio_defecto.date())
-hora_inicio = st.sidebar.time_input("Hora de inicio", inicio_defecto.time())
+# Hora actual local y rango por defecto (últimas 24 h)
+ahora_local = datetime.now(zona_local)
+inicio_defecto_local = ahora_local - timedelta(days=1)
 
-fecha_fin = st.sidebar.date_input("Fecha de fin", fin_defecto.date())
-hora_fin = st.sidebar.time_input("Hora de fin", fin_defecto.time())
+# Selectores de fecha y hora
+fecha_inicio = st.sidebar.date_input("Fecha de inicio", inicio_defecto_local.date())
+hora_inicio = st.sidebar.time_input("Hora de inicio", inicio_defecto_local.time())
 
-# 🔹 Combinar fecha + hora
-dt_inicio = datetime.combine(fecha_inicio, hora_inicio)
-dt_fin = datetime.combine(fecha_fin, hora_fin)
+fecha_fin = st.sidebar.date_input("Fecha de fin", ahora_local.date())
+hora_fin = st.sidebar.time_input("Hora de fin", ahora_local.time())
 
-# 🔹 Validación lógica
-if dt_inicio >= dt_fin:
+# Combinar fecha y hora → datetime local
+dt_inicio_local = zona_local.localize(datetime.combine(fecha_inicio, hora_inicio))
+dt_fin_local = zona_local.localize(datetime.combine(fecha_fin, hora_fin))
+
+# Validar rango
+if dt_inicio_local >= dt_fin_local:
     st.error("⚠️ La fecha/hora de inicio no puede ser posterior o igual a la de fin.")
     st.stop()
 
-# 🔹 Conversión a timestamp en milisegundos (para API)
-ts_start = int(dt_inicio.timestamp() * 1000)
-ts_end = int(dt_fin.timestamp() * 1000)
+# Convertir a UTC
+dt_inicio_utc = dt_inicio_local.astimezone(pytz.utc)
+dt_fin_utc = dt_fin_local.astimezone(pytz.utc)
 
+# Convertir a timestamp (ms)
+ts_start = int(dt_inicio_utc.timestamp() * 1000)
+ts_end = int(dt_fin_utc.timestamp() * 1000)
 
+# Mostrar resumen
+st.sidebar.markdown("### 🕒 Rango seleccionado")
+st.sidebar.write(f"Inicio local: {dt_inicio_local.strftime('%Y-%m-%d %H:%M:%S')}")
+st.sidebar.write(f"Fin local: {dt_fin_local.strftime('%Y-%m-%d %H:%M:%S')}")
+st.sidebar.caption(f"→ Convertido a UTC: {dt_inicio_utc.strftime('%Y-%m-%d %H:%M:%S')} a {dt_fin_utc.strftime('%Y-%m-%d %H:%M:%S')}")
 url = "https://medux-ids.caseonit.com/api/results"
 headers = {
     "Authorization": f"Bearer {token}",
@@ -178,6 +186,7 @@ if not df.empty:
         st.dataframe(subset)
 else:
     st.info("👈 Configura y presiona **Consultar API** para ver los resultados.")
+
 
 
 
