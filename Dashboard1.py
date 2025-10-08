@@ -80,27 +80,28 @@ def obtener_datos():
         st.error(f"❌ Error API: {response.status_code}")
         return None
 
+# ===========================================================
+# 🔹 Lógica de ejecución principal
+# ===========================================================
+if "df" not in st.session_state:
+    st.session_state.df = pd.DataFrame()
+
 if st.sidebar.button("🚀 Consultar API"):
     data = obtener_datos()
     if not data:
         st.stop()
 
-    # =======================================================
-    # 🔹 Procesamiento
-    # =======================================================
     def flatten_results(raw_json):
         rows = []
         for program, results in raw_json.items():
-            # Saltar si no es lista o viene vacío
             if not isinstance(results, list) or len(results) == 0:
                 continue
-            for item in results[:10]:  # mostrar solo los primeros 10
+            for item in results[:10]:
                 flat = {"program": program}
                 if isinstance(item, dict):
                     flat.update(item)
                 rows.append(flat)
         return pd.DataFrame(rows)
-
 
     df = flatten_results(data)
 
@@ -108,9 +109,16 @@ if st.sidebar.button("🚀 Consultar API"):
         st.warning("No se recibieron datos de la API.")
         st.stop()
 
-    # =======================================================
-    # 🔹 Interfaz de gráfico dinámico
-    # =======================================================
+    # Guardar en la sesión para no perderlo
+    st.session_state.df = df
+    st.success("✅ Datos cargados correctamente. Ya puedes explorar los ejes y programas.")
+else:
+    df = st.session_state.df
+
+# ===========================================================
+# 🔹 Interfaz de gráfico dinámico
+# ===========================================================
+if not df.empty:
     st.sidebar.header("📈 Visualización")
 
     programa = st.sidebar.selectbox("Programa", sorted(df["program"].unique()))
@@ -137,8 +145,5 @@ if st.sidebar.button("🚀 Consultar API"):
 
     with st.expander("📄 Ver datos"):
         st.dataframe(subset)
-
 else:
     st.info("👈 Configura y presiona **Consultar API** para ver los resultados.")
-
-
