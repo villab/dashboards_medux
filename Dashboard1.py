@@ -51,8 +51,29 @@ programas = st.sidebar.multiselect(
     default=["ping-test"]
 )
 
-ts_start = st.sidebar.number_input("Timestamp inicio (ms)", value=1756464305000)
-ts_end = st.sidebar.number_input("Timestamp fin (ms)", value=1756575905000)
+from datetime import datetime, timedelta
+
+st.sidebar.markdown("---")
+st.sidebar.header("📅 Rango de fechas")
+
+# Fecha actual y rango por defecto
+fecha_hoy = datetime.utcnow()
+fecha_inicio_defecto = fecha_hoy - timedelta(days=1)
+fecha_fin_defecto = fecha_hoy
+
+# Selector de fechas amigable
+fecha_inicio = st.sidebar.date_input("Fecha de inicio", fecha_inicio_defecto)
+fecha_fin = st.sidebar.date_input("Fecha de fin", fecha_fin_defecto)
+
+# Validación
+if fecha_inicio > fecha_fin:
+    st.error("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin.")
+    st.stop()
+
+# Convertir a timestamps (en milisegundos)
+ts_start = int(datetime.combine(fecha_inicio, datetime.min.time()).timestamp() * 1000)
+ts_end = int(datetime.combine(fecha_fin, datetime.max.time()).timestamp() * 1000)
+
 
 url = "https://medux-ids.caseonit.com/api/results"
 headers = {
@@ -148,4 +169,5 @@ if not df.empty:
         st.dataframe(subset)
 else:
     st.info("👈 Configura y presiona **Consultar API** para ver los resultados.")
+
 
