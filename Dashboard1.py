@@ -151,6 +151,15 @@ def obtener_datos(url, headers, body):
     """Llama la API y devuelve el JSON (se cachea por parámetros únicos)."""
     response = requests.post(url, headers=headers, json=body)
     if response.status_code == 200:
+        st.write("📬 Body enviado a la API:")
+        st.json(body)
+        st.write("🔗 Endpoint:", url)
+        st.write("🧩 Headers:")
+        st.json(headers)
+        st.write("📥 Status:", response.status_code)
+        st.write("📤 Respuesta (texto):")
+        st.text(response.text)
+
         return response.json()
     else:
         st.error(f"❌ Error API: {response.status_code}")
@@ -162,6 +171,8 @@ if "df" not in st.session_state:
     st.session_state.df = pd.DataFrame()
 
 if st.sidebar.button("🚀 Consultar API"):
+    st.sidebar.markdown("### 🧾 Vista previa del body enviado")
+    st.sidebar.json(body)
     data = obtener_datos(url, headers, body)
     if not data:
         st.stop()
@@ -260,4 +271,5 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.info("ℹ️ Este dataset no contiene columnas 'latitude' y 'longitude'.")
 else:
     st.info("👈 Consulta datos primero para ver el mapa.")
+
 
