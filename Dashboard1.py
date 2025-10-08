@@ -225,48 +225,44 @@ else:
     st.info("👈 Configura y presiona **Consultar API** para ver los resultados.")
 
 import plotly.express as px
-import streamlit as st
 
 st.markdown("## 🗺️ Mapa de mediciones")
 
-# Validar si hay coordenadas
-if "latitude" in df.columns and "longitude" in df.columns:
-    # Filtro por programa (opcional)
-    programas_disponibles = sorted(df["program"].unique())
-    programa_sel = st.selectbox("Filtrar por programa", ["Todos"] + list(programas_disponibles))
+st.write("🧭 Columnas disponibles en df:", df.columns.tolist())
 
-    if programa_sel != "Todos":
-        df_plot = df[df["program"] == programa_sel]
+# Detectar columnas de coordenadas automáticamente
+posibles_lat = [c for c in df.columns if "lat" in c.lower()]
+posibles_lon = [c for c in df.columns if "lon" in c.lower()]
+
+if posibles_lat and posibles_lon:
+    lat_col = posibles_lat[0]
+    lon_col = posibles_lon[0]
+
+    df_plot = df.copy()
+
+    # Convertir a numérico y limpiar
+    df_plot[lat_col] = pd.to_numeric(df_plot[lat_col], errors="coerce")
+    df_plot[lon_col] = pd.to_numeric(df_plot[lon_col], errors="coerce")
+    df_plot = df_plot.dropna(subset=[lat_col, lon_col])
+
+    if not df_plot.empty:
+        fig = px.scatter_mapbox(
+            df_plot,
+            lat=lat_col,
+            lon=lon_col,
+            color="program" if "program" in df_plot.columns else None,
+            hover_data=df_plot.columns,
+            zoom=6,
+            height=600,
+        )
+
+        fig.update_layout(
+            mapbox_style="open-street-map",
+            margin={"r": 0, "t": 0, "l": 0, "b": 0},
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
     else:
-        df_plot = df.copy()
-
-    # Crear figura con Plotly
-    fig = px.scatter_mapbox(
-        df_plot,
-        lat="latitude",
-        lon="longitude",
-        color="program",  # o "result_value"
-        size_max=12,
-        zoom=6,
-        height=600,
-        hover_data=["probe", "result_value", "timestamp"],
-        color_discrete_sequence=px.colors.qualitative.Bold,
-    )
-
-    fig.update_layout(
-        mapbox_style="open-street-map",
-        margin={"r": 0, "t": 0, "l": 0, "b": 0},
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
+        st.warning("⚠️ No hay registros válidos con coordenadas.")
 else:
-    st.warning("⚠️ No se encontraron columnas 'latitude' y 'longitude' en los datos.")
-
-
-
-
-
-
-
-
+    st.warning("⚠️ No se encontraron columnas con nombres que contengan 'lat' y 'lon'.")
