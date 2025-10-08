@@ -189,40 +189,82 @@ else:
     st.info("👈 Configura y presiona **Consultar API** o activa real-time para ver los resultados.")
 
 # ===========================================================
-# 🌍 Mapa centrado en la última coordenada
+# 🌍 Mapa de mediciones centrado en la última coordenada
 # ===========================================================
 st.markdown("## 🗺️ Mapa de mediciones")
 
-if not df.empty and "latitude" in df.columns and "longitude" in df.columns:
-    df_plot = df.copy()
-    df_plot["latitude"] = pd.to_numeric(df_plot["latitude"], errors="coerce")
-    df_plot["longitude"] = pd.to_numeric(df_plot["longitude"], errors="coerce")
-    df_plot = df_plot.dropna(subset=["latitude", "longitude"])
-    if not df_plot.empty:
-        ultimo_punto = df_plot.iloc[-1]
-        centro_lat, centro_lon = ultimo_punto["latitude"], ultimo_punto["longitude"]
+if "df" in st.session_state and not st.session_state.df.empty:
+    df_plot = st.session_state.df.copy()
 
-        lat_range = df_plot["latitude"].max() - df_plot["latitude"].min()
-        lon_range = df_plot["longitude"].max() - df_plot["longitude"].min()
-        zoom_auto = 15 if lat_range < 0.1 and lon_range < 0.1 else 14 if lat_range < 1 else 12 if lat_range < 5 else 10
-        zoom_user = st.sidebar.slider("🔍 Nivel de zoom del mapa", 3, 15, int(zoom_auto))
+    # Asegurarse de que existan columnas de coordenadas
+    if "latitude" in df_plot.columns and "longitude" in df_plot.columns:
+        df_plot["latitude"] = pd.to_numeric(df_plot["latitude"], errors="coerce")
+        df_plot["longitude"] = pd.to_numeric(df_plot["longitude"], errors="coerce")
+        df_plot = df_plot.dropna(subset=["latitude", "longitude"])
 
-        color_col = "program" if "program" in df_plot.columns else "isp" if "isp" in df_plot.columns else "provider" if "provider" in df_plot.columns else None
-        hover_cols = [c for c in ["latitude", "longitude", "city", "isp", "provider", "subtechnology", "avgLatency"] if c in df_plot.columns]
-        hover_name_col = "program" if "program" in df_plot.columns else None
+        if not df_plot.empty:
+            # 📌 Centrar en la última coordenada
+            ultimo_punto = df_plot.iloc[-1]
+            centro_lat = ultimo_punto["latitude"]
+            centro_lon = ultimo_punto["longitude"]
 
-        fig = px.scatter_mapbox(
-            df_plot,
-            lat="latitude",
-            lon="longitude",
-            color=color_col,
-            hover_name=hover_name_col,
-            hover_data=hover_cols,
-            color_discrete_sequence=px.colors.qualitative.Bold,
-            height=600
-        )
+            # Calcular dispersión para zoom automático
+            lat_range = df_plot["latitude"].max() - df_plot["latitude"].min()
+            lon_range = df_plot["longitude"].max() - df_plot["longitude"].min()
 
-        fig.update_layout(
-            mapbox_style="open-street-map",
-            mapbox_center={"lat": centro_lat, "lon": centro_lon},
-            mapbox_zoom=zoom_user,
+            if lat_range < 0.1 and lon_range < 0.1:
+                zoom_auto = 15
+            elif lat_range < 1 and lon_range < 1:
+                zoom_auto = 14
+            elif lat_range < 5 and lon_range < 5:
+                zoom_auto = 12
+            else:
+                zoom_auto = 10
+
+            # Slider de zoom manual
+            zoom_user = st.sidebar.slider("🔍 Nivel de zoom del mapa", 3, 15, int(zoom_auto))
+
+            # Determinar columna de color disponible
+            if "program" in df_plot.columns:
+                color_col = "program"
+            elif "isp" in df_plot.columns:
+                color_col = "isp"
+            elif "provider" in df_plot.columns:
+                color_col = "provider"
+            else:
+                color_col = None
+
+            # Columnas existentes para hover
+            hover_cols = [c for c in ["latitude", "longitude", "city", "isp", "provider", "subtechnology", "avgLatency"] if c in df_plot.columns]
+            hover_name_col = "program" if "program" in df_plot.columns else None
+
+            # Crear mapa
+            fig = px.scatter_mapbox(
+                df_plot,
+                lat="latitude",
+                lon="longitude",
+                color=color_col,
+                hover_name=hover_name_col,
+                hover_data=hover_cols,
+                color_discrete_sequence=px.colors.qualitative.Bold,
+                height=600,
+            )
+
+            fig.update_layout(
+                mapbox_style="open-street-map",
+                mapbox_center={"lat": centro_lat, "lon": centro_lon},
+                mapbox_zoom=zoom_user,
+                margin={"r": 0, "t": 0, "l": 0, "b": 0},
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption(f"🗺️ Última medición: ({centro_lat:.4f}, {centro_lon:.4f}) | Zoom: {zoom_user}")
+
+        else:
+            st.warning("⚠️ No hay coordenadas válidas para mostrar en el mapa.")
+    else:
+        st.warning("⚠️ El dataset no contiene columnas 'latitude' y 'longitude'.")
+else:
+    st.info("👈 Consulta primero la API para visualizar el mapa.")
+
+
