@@ -1,102 +1,106 @@
 import streamlit as st
-import requests
 import pandas as pd
-import json
 import plotly.express as px
-from io import StringIO
+import requests
+import json
 
 # ================================
-# 🔹 Configuración general
+# 🔹 Configuración
 # ================================
-st.set_page_config(page_title="Dashboard SUTEL RAW", layout="wide")
-st.title("📊 Visualización de datos RAW desde API MedUX")
-
-# ================================
-# 🔹 Entrada de archivos y parámetros
-# ================================
-st.markdown("### Archivos necesarios")
-
-csv_file = st.file_uploader("📄 Cargar archivo CSV con probes_id", type=["csv"])
-token_file = st.file_uploader("🔑 Cargar archivo con token (.txt)", type=["txt"])
-
-ts_start = st.number_input("Timestamp inicio (ms):", value=1756464305000)
-ts_end = st.number_input("Timestamp fin (ms):", value=1756575905000)
-
-programs = st.multiselect(
-    "Programas a consultar:",
-    ["http-upload-burst-test", "http-down-burst-test", "ping-test"],
-    default=["http-upload-burst-test", "http-down-burst-test", "ping-test"]
-)
-
+st.title("📊 Dashboard RAW – Medux API")
 url = "https://medux-ids.caseonit.com/api/results"
+csv_file = "probes.csv"
+token_file = "token_fijo.txt"
 
-# ================================
-# 🔹 Consultar API
-# ================================
-if st.button("🚀 Consultar API"):
-    if not csv_file or not token_file:
-        st.error("⚠️ Debes subir el archivo CSV y el archivo de token.")
+# Leer token
+with open(token_file, "r") as f:
+    token = f.read().strip()
+
+# Leer probes
+df_probes = pd.read_csv(csv_file)
+probes = df_probes["probes_id"].dropna().tolist()
+
+# Headers y body
+headers = {
+    "Authorization": f"Bearer {token}",
+    "Content-Type": "application/json"
+}
+
+body = {
+    "tsStart": 1756464305000,
+    "tsEnd": 1756575905000,
+    "format": "raw",
+    "programs": [
+        "http-upload-burst-test",
+        "http-down-burst-test",
+        "ping-test"
+    ],
+    "probes": probes,
+}
+
+# Obtener datos
+@st.cache_data(ttl=3600)
+def obtener_datos():
+    response = requests.post(url, headers=headers, json=body)
+    if response.status_code == 200:
+        return response.json()
     else:
-        try:
-            # Leer token
-            token = token_file.read().decode("utf-8").strip()
+        st.error(f"❌ Error API: {response.status_code}")
+        return None
 
-            # Leer probes desde CSV subido
-            df = pd.read_csv(csv_file)
-            probes = df["probes_id"].dropna().tolist()
+data = obtener_datos()
+if not data:
+    st.stop()
 
-            headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-            body = {
-                "tsStart": ts_start,
-                "tsEnd": ts_end,
-                "format": "raw",
-                "programs": programs,
-                "probes": probes,
-            }
+# ======================================
+# 🔹 Convertir JSON a DataFrame plano
+# ======================================
+def flatten_results(raw_json):
+    rows = []
+    for program, results in raw_json.items():
+        for item in results[:10]:  # solo 10 primeros por tipo
+            flat = {"program": program}
+            if isinstance(item, dict):
+                flat.update(item)
+            rows.append(flat)
+    return pd.DataFrame(rows)
 
-            st.info("⏳ Consultando API, espera un momento...")
-            response = requests.post(url, headers=headers, json=body)
+df = flatten_results(data)
 
-            if response.status_code == 200:
-                data = response.json()
-                dfs = {}
+# ======================================
+# 🔹 Interfaz de selección
+# ======================================
+st.sidebar.header("⚙️ Configuración del gráfico")
 
-                for program_name, program_data in data.items():
-                    if isinstance(program_data, list) and len(program_data) > 0:
-                        df_program = pd.DataFrame(program_data)
+programa = st.sidebar.selectbox("Programa", sorted(df["program"].unique()))
+subset = df[df["program"] == programa]
 
-                        # Expandir campo 'results' si existe
-                        if "results" in df_program.columns:
-                            df_results = pd.json_normalize(df_program["results"])
-                            df_program = pd.concat(
-                                [df_program.drop(columns=["results"]), df_results], axis=1
-                            )
+if subset.empty:
+    st.warning("No hay datos disponibles para este programa.")
+    st.stop()
 
-                        dfs[program_name] = df_program
-                    else:
-                        st.warning(f"⚠️ Sin datos para {program_name}")
+# Mostrar columnas disponibles
+columnas_numericas = subset.select_dtypes(include="number").columns.tolist()
+columnas_todas = subset.columns.tolist()
 
-                # ======================
-                # 🔹 Visualización
-                # ======================
-                for name, df_prog in dfs.items():
-                    st.subheader(f"📘 {name}")
-                    st.write(f"{len(df_prog)} registros - {df_prog.shape[1]} columnas")
+eje_x = st.sidebar.selectbox("Eje X", columnas_todas, index=0)
+eje_y = st.sidebar.selectbox("Eje Y", columnas_numericas, index=1 if len(columnas_numericas) > 1 else 0)
+tipo = st.sidebar.selectbox("Tipo de gráfico", ["scatter", "line", "bar"])
 
-                    st.dataframe(df_prog.head(20))
+# ======================================
+# 🔹 Render del gráfico
+# ======================================
+if tipo == "scatter":
+    fig = px.scatter(subset, x=eje_x, y=eje_y, title=f"{programa}: {eje_y} vs {eje_x}")
+elif tipo == "line":
+    fig = px.line(subset, x=eje_x, y=eje_y, title=f"{programa}: {eje_y} vs {eje_x}")
+else:
+    fig = px.bar(subset, x=eje_x, y=eje_y, title=f"{programa}: {eje_y} vs {eje_x}")
 
-                    numeric_cols = df_prog.select_dtypes("number").columns.tolist()
-                    if len(numeric_cols) >= 2:
-                        x_col = st.selectbox(f"Eje X para {name}", numeric_cols, index=0, key=f"x_{name}")
-                        y_col = st.selectbox(f"Eje Y para {name}", numeric_cols, index=1, key=f"y_{name}")
-                        fig = px.line(df_prog, x=x_col, y=y_col, title=f"{name}: {y_col} vs {x_col}")
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.info(f"No hay columnas numéricas para graficar en {name}")
+st.plotly_chart(fig, use_container_width=True)
 
-            else:
-                st.error(f"❌ Error al consultar API: {response.status_code}")
-                st.code(response.text, language="json")
-
-        except Exception as e:
-            st.error(f"❌ Error ejecutando la consulta: {e}")
+# ======================================
+# 🔹 Tabla de datos
+# ======================================
+with st.expander("📄 Ver datos"):
+    st.dataframe(subset)
