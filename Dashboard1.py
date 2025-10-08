@@ -147,14 +147,14 @@ body = {
 # 🔹 Llamada a la API
 # ===========================================================
 @st.cache_data(ttl=1800)
-def obtener_datos():
+def obtener_datos(url, headers, body):
+    """Llama la API y devuelve el JSON (se cachea por parámetros únicos)."""
     response = requests.post(url, headers=headers, json=body)
     if response.status_code == 200:
         return response.json()
     else:
         st.error(f"❌ Error API: {response.status_code}")
         return None
-
 # ===========================================================
 # 🔹 Lógica de ejecución principal
 # ===========================================================
@@ -162,7 +162,7 @@ if "df" not in st.session_state:
     st.session_state.df = pd.DataFrame()
 
 if st.sidebar.button("🚀 Consultar API"):
-    data = obtener_datos()
+    data = obtener_datos(url, headers, body)
     if not data:
         st.stop()
 
@@ -228,41 +228,36 @@ import plotly.express as px
 
 st.markdown("## 🗺️ Mapa de mediciones")
 
-# Crear copia del dataframe
-df_plot = df.copy()
+if "df" in st.session_state and not st.session_state.df.empty:
+    df_plot = st.session_state.df.copy()
 
-# Asegurarse de que las coordenadas sean numéricas
-df_plot["latitude"] = pd.to_numeric(df_plot["latitude"], errors="coerce")
-df_plot["longitude"] = pd.to_numeric(df_plot["longitude"], errors="coerce")
+    if "latitude" in df_plot.columns and "longitude" in df_plot.columns:
+        # Asegurarse de que las coordenadas sean numéricas
+        df_plot["latitude"] = pd.to_numeric(df_plot["latitude"], errors="coerce")
+        df_plot["longitude"] = pd.to_numeric(df_plot["longitude"], errors="coerce")
 
-# Eliminar filas sin coordenadas válidas
-df_plot = df_plot.dropna(subset=["latitude", "longitude"])
+        # Eliminar filas sin coordenadas válidas
+        df_plot = df_plot.dropna(subset=["latitude", "longitude"])
 
-if not df_plot.empty:
-    fig = px.scatter_mapbox(
-        df_plot,
-        lat="latitude",
-        lon="longitude",
-        color="isp",  # puedes cambiar por 'provider' o 'subtechnology'
-        hover_data=[
-            "probeId",
-            "provider",
-            "subtechnology",
-            "avgLatency",
-            "region",
-            "city",
-            "dateStart",
-            "dateEnd",
-        ],
-        zoom=6,
-        height=650,
-    )
-
-    fig.update_layout(
-        mapbox_style="open-street-map",
-        margin={"r": 0, "t": 0, "l": 0, "b": 0},
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
+        if not df_plot.empty:
+            fig = px.scatter_mapbox(
+                df_plot,
+                lat="latitude",
+                lon="longitude",
+                color=df_plot["isp"] if "isp" in df_plot.columns else None,
+                hover_data=[col for col in ["probeId", "provider", "subtechnology", "avgLatency", "region", "city", "dateStart", "dateEnd"] if col in df_plot.columns],
+                zoom=6,
+                height=650,
+            )
+            fig.update_layout(
+                mapbox_style="open-street-map",
+                margin={"r": 0, "t": 0, "l": 0, "b": 0},
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("⚠️ No hay registros válidos con coordenadas.")
+    else:
+        st.info("ℹ️ Este dataset no contiene columnas 'latitude' y 'longitude'.")
 else:
-    st.warning("⚠️ No hay registros válidos con coordenadas (latitude / longitude).")
+    st.info("👈 Consulta datos primero para ver el mapa.")
+
