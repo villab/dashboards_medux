@@ -189,7 +189,7 @@ else:
     st.info("👈 Configura y presiona **Consultar API** o activa real-time para ver los resultados.")
 
 # ===========================================================
-# 🌍 Mapas de mediciones por ISP
+# 🌍 Mapas de mediciones por ISP (colores fijos por ISP)
 # ===========================================================
 st.markdown("## 🗺️ Mapas por ISP")
 
@@ -203,7 +203,10 @@ if "df" in st.session_state and not st.session_state.df.empty:
         df_plot = df_plot.dropna(subset=["latitude", "longitude", "isp"])
 
         if not df_plot.empty:
-            for isp in df_plot["isp"].unique():
+            # Colores fijos para cada ISP (ajustar cantidad si hay más ISP)
+            colores_isp = ["blue", "green", "red", "orange", "purple", "cyan"]
+
+            for i, isp in enumerate(df_plot["isp"].unique()):
                 df_isp = df_plot[df_plot["isp"] == isp]
 
                 if df_isp.empty:
@@ -217,7 +220,6 @@ if "df" in st.session_state and not st.session_state.df.empty:
                 # Zoom automático basado en dispersión
                 lat_range = df_isp["latitude"].max() - df_isp["latitude"].min()
                 lon_range = df_isp["longitude"].max() - df_isp["longitude"].min()
-
                 if lat_range < 0.1 and lon_range < 0.1:
                     zoom_auto = 15
                 elif lat_range < 1 and lon_range < 1:
@@ -230,17 +232,16 @@ if "df" in st.session_state and not st.session_state.df.empty:
                 zoom_user = st.sidebar.slider(f"Zoom para {isp}", 3, 15, int(zoom_auto))
 
                 hover_cols = [c for c in ["latitude", "longitude", "city", "provider", "subtechnology", "avgLatency", "program"] if c in df_isp.columns]
-                
+
+                # 🔹 Crear mapa con color fijo por ISP
                 fig = px.scatter_mapbox(
                     df_isp,
                     lat="latitude",
                     lon="longitude",
-                    color="isp",  # puedes cambiar por 'subtechnology' si quieres
                     hover_name="isp",
                     hover_data=hover_cols,
-                    color_discrete_sequence=px.colors.qualitative.Bold,
+                    color_discrete_sequence=[colores_isp[i % len(colores_isp)]],
                     height=500,
-                    labels={"program": "Tipo de prueba"},
                 )
 
                 fig.update_layout(
@@ -248,7 +249,6 @@ if "df" in st.session_state and not st.session_state.df.empty:
                     mapbox_center={"lat": centro_lat, "lon": centro_lon},
                     mapbox_zoom=zoom_user,
                     margin={"r": 0, "t": 0, "l": 0, "b": 0},
-                    legend_title_text="Programas Medux",
                 )
 
                 st.subheader(f"ISP: {isp}")
