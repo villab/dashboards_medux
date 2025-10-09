@@ -189,17 +189,17 @@ def flatten_results(raw_json, requested_programs):
 # ===============================================
 # 📦 Cargar los datos
 # ===============================================
-df = flatten_results(data, programas)
+if "df" not in st.session_state:
+    df = flatten_results(data, programas)
 
-if df.empty:
-    st.warning("No se recibieron datos de la API.")
-    st.stop()
+    if df.empty:
+        st.warning("No se recibieron datos de la API.")
+        st.stop()
 
-st.session_state.df = df
-st.success("✅ Datos cargados correctamente.")
+    st.session_state.df = df
+    st.success("✅ Datos cargados correctamente.")
 else:
     df = st.session_state.df
-
 
 # ===========================================================
 # 🔹 Interfaz de gráficos
@@ -295,4 +295,5 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas por ISP.")
+
 
