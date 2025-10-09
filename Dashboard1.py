@@ -235,7 +235,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
                     df_isp,
                     lat="latitude",
                     lon="longitude",
-                    color="program",  # puedes cambiar por 'subtechnology' si quieres
+                    color="isp",  # puedes cambiar por 'subtechnology' si quieres
                     hover_name="isp",
                     hover_data=hover_cols,
                     color_discrete_sequence=px.colors.qualitative.Bold,
@@ -260,6 +260,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
 
 
 
