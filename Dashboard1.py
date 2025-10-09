@@ -124,15 +124,17 @@ def construir_body(use_field="programs"):
         "probes": [str(p) for p in probes if pd.notna(p)],
     }
 
+
 @st.cache_data(ttl=1800)
 def obtener_datos(url, headers, body):
-    """Realiza la petición y devuelve JSON si es válida."""
     response = requests.post(url, headers=headers, json=body)
+    st.write("📤 Body enviado:", body)  # 👈 imprime el body que se mandó
+    st.write("📥 Código:", response.status_code)
+    st.write("📥 Texto respuesta:", response.text)
     if response.status_code == 200:
         return response.json()
     else:
         return {"error": response.status_code, "text": response.text}
-
 # ===========================================================
 # 🔹 Ejecución principal
 # ===========================================================
@@ -298,6 +300,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas por ISP.")
+
 
 
 
