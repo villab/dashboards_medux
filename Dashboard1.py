@@ -3,7 +3,6 @@ import pandas as pd
 import plotly.express as px
 import requests
 import json
-from io import StringIO
 from datetime import datetime, timedelta, time
 import pytz
 from streamlit_autorefresh import st_autorefresh
@@ -30,12 +29,14 @@ else:
     st.warning("⚠️ Ingresa o sube un token válido para continuar.")
     st.stop()
 
+st.session_state.api_token = token
+
 # CSV de probes
 st.sidebar.markdown("---")
 probes_file = st.sidebar.file_uploader("📄 Subir CSV de probes", type=["csv"])
 if probes_file is not None:
     df_probes = pd.read_csv(probes_file)
-    probes = df_probes["probes_id"].dropna().astype(str).tolist()
+    probes = df_probes["probes_id"].dropna().tolist()
 else:
     st.warning("⚠️ Sube un archivo CSV con la columna `probes_id`.")
     st.stop()
@@ -68,27 +69,17 @@ ahora_local = datetime.now(zona_local)
 inicio_defecto_local = ahora_local - timedelta(days=1)
 
 fecha_inicio_defecto = inicio_defecto_local.date()
-hora_inicio_defecto = time(inicio_defecto_local.hour, inicio_defecto_local.minute)
+hora_inicio_defecto = inicio_defecto_local.time().replace(second=0, microsecond=0)
 fecha_fin_defecto = ahora_local.date()
-hora_fin_defecto = time(ahora_local.hour, ahora_local.minute)
+hora_fin_defecto = ahora_local.time().replace(second=0, microsecond=0)
 
 st.sidebar.markdown("---")
 st.sidebar.header("📅 Rango de fechas y horas (hora local)")
 
-for key, default in [("fecha_inicio", fecha_inicio_defecto), ("hora_inicio", hora_inicio_defecto),
-                     ("fecha_fin", fecha_fin_defecto), ("hora_fin", hora_fin_defecto)]:
-    if key not in st.session_state:
-        st.session_state[key] = default
-
-fecha_inicio = st.sidebar.date_input("Fecha de inicio", st.session_state["fecha_inicio"])
-hora_inicio = st.sidebar.time_input("Hora de inicio", st.session_state["hora_inicio"])
-fecha_fin = st.sidebar.date_input("Fecha de fin", st.session_state["fecha_fin"])
-hora_fin = st.sidebar.time_input("Hora de fin", st.session_state["hora_fin"])
-
-st.session_state["fecha_inicio"] = fecha_inicio
-st.session_state["hora_inicio"] = hora_inicio
-st.session_state["fecha_fin"] = fecha_fin
-st.session_state["hora_fin"] = hora_fin
+fecha_inicio = st.sidebar.date_input("Fecha de inicio", fecha_inicio_defecto)
+hora_inicio = st.sidebar.time_input("Hora de inicio", hora_inicio_defecto)
+fecha_fin = st.sidebar.date_input("Fecha de fin", fecha_fin_defecto)
+hora_fin = st.sidebar.time_input("Hora de fin", hora_fin_defecto)
 
 # ===========================================================
 # 🔄 Real-time y refresco automático
@@ -98,127 +89,123 @@ usar_real_time = st.sidebar.checkbox("⏱️ Modo real-time (últimos 30 min)", 
 
 if usar_real_time:
     ahora_local = datetime.now(zona_local)
-    ts_end = int(ahora_local.astimezone(pytz.utc).timestamp() * 1000)
-    ts_start = int((ahora_local - timedelta(minutes=30)).astimezone(pytz.utc).timestamp() * 1000)
+    fecha_inicio = (ahora_local - timedelta(minutes=30)).date()
+    hora_inicio = (ahora_local - timedelta(minutes=30)).time()
+    fecha_fin = ahora_local.date()
+    hora_fin = ahora_local.time()
+
     st.sidebar.caption(f"Real-time activado → Últimos 30 min ({ahora_local.strftime('%H:%M:%S')})")
-else:
-    dt_inicio_local = zona_local.localize(datetime.combine(fecha_inicio, hora_inicio))
-    dt_fin_local = zona_local.localize(datetime.combine(fecha_fin, hora_fin))
-    if dt_inicio_local >= dt_fin_local:
-        st.error("⚠️ La fecha/hora de inicio no puede ser posterior o igual a la de fin.")
-        st.stop()
-    ts_start = int(dt_inicio_local.astimezone(pytz.utc).timestamp() * 1000)
-    ts_end = int(dt_fin_local.astimezone(pytz.utc).timestamp() * 1000)
-
-# Mostrar resumen en el sidebar
-st.sidebar.markdown("### 🕒 Rango seleccionado")
-st.sidebar.write(f"Inicio local: {datetime.fromtimestamp(ts_start/1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')}")
-st.sidebar.write(f"Fin local: {datetime.fromtimestamp(ts_end/1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ===========================================================
-# 🔹 Construcción del body dinámico
+# 🧩 Funciones auxiliares
 # ===========================================================
-def construir_body(campo_programas: str, next_pagination_data=None):
-    body = {
-        "paginate": True,
-        "size": 10000,
-        "format": "raw",
-        campo_programas: programas,
-        "tsStart": ts_start,
-        "tsEnd": ts_end,
-        "probes": probes
+def obtener_datos_api(programa, fecha_inicio, fecha_fin):
+    """
+    Descarga los datos desde la API con soporte de paginación y fallback
+    entre los campos 'tests' y 'programs'.
+    """
+    url = "https://medux-ids.caseonit.com/api/results"
+    headers = {
+        "Authorization": f"Bearer {st.session_state.api_token}",
+        "Content-Type": "application/json"
     }
-    if next_pagination_data:
-        body["next_pagination_data"] = next_pagination_data
-    return body
 
-# ===========================================================
-# 🔹 Descarga paginada con soporte next_pagination_data
-# ===========================================================
-@st.cache_data(ttl=1800, show_spinner=False)
-def obtener_datos_api(url, headers, campo_programas="programs"):
-    all_results = []
-    next_page = None
+    def construir_body(campo, pagination_data=None):
+        body = {
+            "format": "raw",
+            "probes": [str(p) for p in probes if pd.notna(p)],
+            campo: [programa],
+            "tsStart": int(datetime.combine(fecha_inicio, hora_inicio).timestamp() * 1000),
+            "tsEnd": int(datetime.combine(fecha_fin, hora_fin).timestamp() * 1000),
+        }
+        if pagination_data:
+            body["pagination_data"] = pagination_data
+        return body
+
+    data_total = []
+    paginacion = None
     pagina = 1
+    exito = False
 
-    with st.spinner("📡 Consultando API con paginación..."):
+    for campo in ["tests", "programs"]:
         while True:
-            body = construir_body(campo_programas, next_page)
-            response = requests.post(url, headers=headers, json=body)
+            body = construir_body(campo, paginacion)
+            try:
+                resp = requests.post(url, headers=headers, json=body, timeout=60)
+                if resp.status_code == 400:
+                    st.warning(f"⚠️ Error con '{campo}', reintentando con el siguiente...")
+                    break  # cambia de campo y vuelve a intentar
+                resp.raise_for_status()
+                data = resp.json()
 
-            # Si hay error con 'tests', reintenta con 'programs'
-            if response.status_code == 400 and campo_programas == "tests":
-                st.warning("⚠️ Error con 'tests', reintentando con 'programs'...")
-                return obtener_datos_api(url, headers, "programs")
+                results = data.get("results", [])
+                if not results:
+                    st.warning(f"⚠️ Página {pagina} vacía para {campo}.")
+                    break
 
-            if response.status_code != 200:
-                st.error(f"❌ Error API {response.status_code}: {response.text}")
+                df_page = pd.DataFrame(results)
+                data_total.append(df_page)
+                total = sum(len(d) for d in data_total)
+                st.info(f"📥 Página {pagina} → {len(df_page)} registros (total: {total:,})")
+
+                # Si hay más páginas
+                paginacion = data.get("next_pagination_data")
+                if paginacion:
+                    pagina += 1
+                    tm.sleep(0.5)
+                else:
+                    exito = True
+                    break
+
+            except Exception as e:
+                st.error(f"❌ Error obteniendo datos: {e}")
                 break
 
-            data = response.json()
-            results = data.get("results", [])
-            all_results.extend(results)
-            st.info(f"📥 Página {pagina} → {len(results):,} registros (total: {len(all_results):,})")
+        if exito:
+            break  # si ya obtuvo datos con un campo válido, no prueba el otro
 
-            next_page = data.get("next_pagination_data")
-            if not next_page:
-                break
+    if not data_total:
+        st.error("❌ No se recibieron datos válidos de la API.")
+        return pd.DataFrame()
 
-            pagina += 1
-            tm.sleep(0.5)
+    df = pd.concat(data_total, ignore_index=True)
+    st.success(f"✅ Datos cargados correctamente: {len(df):,} registros totales.")
+    return df
 
-    st.success(f"✅ Datos cargados correctamente: {len(all_results):,} registros totales.")
-    return all_results
+
+def flatten_results(raw_df):
+    """Normaliza el campo 'program' según la estructura disponible."""
+    if raw_df.empty:
+        return pd.DataFrame()
+
+    df = raw_df.copy()
+    if "test" in df.columns:
+        df["program"] = df["test"]
+    elif "program" in df.columns:
+        df["program"] = df["program"]
+    else:
+        df["program"] = "network"
+    return df
+
 
 # ===========================================================
 # 🔹 Ejecución principal
 # ===========================================================
-url = "https://medux-ids.caseonit.com/api/results"
-headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-
 if st.sidebar.button("🚀 Consultar API") or usar_real_time:
-    results = obtener_datos_api(url, headers, "tests")
+    all_data = []
+    for programa in programas:
+        st.subheader(f"📡 Consultando programa: {programa}")
+        df_prog = obtener_datos_api(programa, fecha_inicio, fecha_fin)
+        if not df_prog.empty:
+            df_prog = flatten_results(df_prog)
+            all_data.append(df_prog)
 
-    if not results:
-        st.warning("⚠️ Reintentando con campo 'programs'...")
-        results = obtener_datos_api(url, headers, "programs")
-
-    if not results:
-        st.error("❌ No se recibieron datos válidos de la API.")
+    if not all_data:
+        st.error("❌ No se obtuvieron datos de ningún programa.")
         st.stop()
 
-    # ===============================================
-    # ✅ Procesar resultados
-    # ===============================================
-    def flatten_results(results, requested_programs):
-        rows = []
-        for item in results:
-            flat = item.copy()
-            flat["program"] = (
-                item.get("test")
-                or item.get("program")
-                or item.get("taskName")
-                or ("network" if "rssi" in item else None)
-                or (requested_programs[0] if len(requested_programs) == 1 else "Desconocido")
-            )
-            rows.append(flat)
-
-        df_flat = pd.DataFrame(rows)
-        if not df_flat.empty:
-            df_flat["program"] = df_flat["program"].fillna("Desconocido")
-            df_flat.loc[df_flat["program"].str.strip() == "", "program"] = "Desconocido"
-        return df_flat
-
-    df = flatten_results(results, programas)
-
-    if df.empty:
-        st.warning("⚠️ No se recibieron datos válidos o 'results' está vacío.")
-        st.stop()
-
+    df = pd.concat(all_data, ignore_index=True)
     st.session_state.df = df
-    st.success(f"✅ Datos cargados correctamente: {len(df):,} registros totales.")
-    st.write("📊 Distribución por programa:")
-    st.write(df["program"].value_counts())
 
 else:
     df = st.session_state.df if "df" in st.session_state else pd.DataFrame()
@@ -278,7 +265,15 @@ if "df" in st.session_state and not st.session_state.df.empty:
                 lat_range = df_isp["latitude"].max() - df_isp["latitude"].min()
                 lon_range = df_isp["longitude"].max() - df_isp["longitude"].min()
 
-                zoom_auto = 15 if lat_range < 0.1 and lon_range < 0.1 else 13 if lat_range < 1 else 11 if lat_range < 5 else 9
+                if lat_range < 0.1 and lon_range < 0.1:
+                    zoom_auto = 15
+                elif lat_range < 1 and lon_range < 1:
+                    zoom_auto = 13
+                elif lat_range < 5 and lon_range < 5:
+                    zoom_auto = 11
+                else:
+                    zoom_auto = 9
+
                 zoom_user = st.sidebar.slider(f"🔍 Zoom para {isp}", 3, 15, int(zoom_auto))
                 hover_cols = [c for c in ["latitude", "longitude", "city", "program", "subtechnology", "avgLatency"] if c in df_isp.columns]
 
@@ -286,8 +281,8 @@ if "df" in st.session_state and not st.session_state.df.empty:
                     df_isp,
                     lat="latitude",
                     lon="longitude",
-                    color="program" if "program" in df_isp.columns else None,
-                    hover_name="program" if "program" in df_isp.columns else None,
+                    color="program",
+                    hover_name="program",
                     hover_data=hover_cols,
                     color_discrete_sequence=[colores[i % len(colores)]],
                     height=500,
@@ -309,4 +304,3 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas por ISP.")
-
