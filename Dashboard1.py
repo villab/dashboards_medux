@@ -151,16 +151,24 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
         st.stop()
 
 # ===============================================
-# ✅ Versión mejorada de flatten_results
+# 🧩 Versión de diagnóstico de flatten_results
 # ===============================================
 def flatten_results(raw_json, requested_programs):
+    st.info("🔍 Ejecutando flatten_results()...")
+
+    # Mostrar una vista previa del JSON recibido
+    try:
+        st.json(raw_json if isinstance(raw_json, dict) else {"type": str(type(raw_json))})
+    except Exception:
+        st.warning("No se pudo mostrar el JSON (posiblemente muy grande).")
+
     rows = []
     if isinstance(raw_json, dict) and "results" in raw_json:
         for item in raw_json["results"]:
             if isinstance(item, dict):
                 flat = item.copy()
 
-                # Detectar o asignar el programa
+                # Asignar programa con detección robusta
                 if "test" in item:
                     flat["program"] = item["test"]
                 elif "program" in item:
@@ -168,43 +176,46 @@ def flatten_results(raw_json, requested_programs):
                 elif "taskName" in item:
                     flat["program"] = item["taskName"]
                 else:
-                    # Si no viene, usar el que se solicitó (ej. "network")
-                    if len(requested_programs) == 1:
+                    # fallback → usar lo solicitado
+                    if isinstance(requested_programs, list) and len(requested_programs) == 1:
                         flat["program"] = requested_programs[0]
                     else:
                         flat["program"] = "Desconocido"
 
                 rows.append(flat)
     else:
-        st.warning("⚠️ La respuesta no tiene 'results'.")
+        st.error("❌ La respuesta no tiene 'results' o no es un dict válido.")
+        return pd.DataFrame()  # devolver vacío para evitar crasheo
 
     df_flat = pd.DataFrame(rows)
-    if "program" in df_flat.columns:
+    st.success(f"✅ Se extrajeron {len(df_flat)} filas desde la API.")
+
+    if not df_flat.empty:
+        # Normalizar columna program
         df_flat["program"] = df_flat["program"].fillna("Desconocido")
         df_flat.loc[df_flat["program"].str.strip() == "", "program"] = "Desconocido"
+        st.write("🧾 Ejemplo de datos procesados:", df_flat.head(5))
 
     return df_flat
 
 
 # ===============================================
-# 📦 Cargar los datos
+# 📦 Cargar datos en sesión
 # ===============================================
 if "df" not in st.session_state:
+    st.info("🚀 Procesando respuesta de la API...")
     df = flatten_results(data, programas)
 
     if df.empty:
-        st.warning("No se recibieron datos de la API.")
+        st.warning("⚠️ No se recibieron datos o no se pudo procesar la API.")
         st.stop()
 
     st.session_state.df = df
     st.success("✅ Datos cargados correctamente.")
-
-    # 🔍 Verificación: mostrar cuántos registros hay por programa
-    st.subheader("📊 Conteo de registros por programa")
-    st.write(df["program"].value_counts())
-
+    st.write("📊 Conteo por programa:", df["program"].value_counts())
 else:
     df = st.session_state.df
+
 
 # ===========================================================
 # 🔹 Interfaz de gráficos
@@ -300,6 +311,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas por ISP.")
+
 
 
 
