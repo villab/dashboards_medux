@@ -165,14 +165,15 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
                         flat = item.copy()
                         flat["program"] = item.get("test", key)
                         rows.append(flat)
+    
+        df = pd.DataFrame(rows)
+    
+        # Normalizar: si aún queda alguno con "Desconocido", intenta recuperar desde el campo test
+        if "test" in df.columns:
+            df["program"] = df["program"].where(df["program"] != "Desconocido", df["test"])
+    
+        return df
 
-    df = pd.DataFrame(rows)
-
-    # Normalizar: si aún queda alguno con "Desconocido", intenta recuperar desde el campo test
-    if "test" in df.columns:
-        df["program"] = df["program"].where(df["program"] != "Desconocido", df["test"])
-
-    return df
 
 
     df = flatten_results(data)
@@ -284,6 +285,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude', 'isp' o 'program'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
 
 
 
