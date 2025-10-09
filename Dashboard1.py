@@ -150,37 +150,56 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
     if not data:
         st.stop()
 
-    # ===============================================
-    # ✅ Versión mejorada de flatten_results
-    # ===============================================
-    def flatten_results(raw_json):
-        rows = []
-        if isinstance(raw_json, dict) and "results" in raw_json:
-            for item in raw_json["results"]:
-                if isinstance(item, dict):
-                    flat = item.copy()
-                    # Algunos programas como "network" no traen 'test'
-                    if "test" in item:
-                        flat["program"] = item["test"]
-                    elif "program" in item:
-                        flat["program"] = item["program"]
+# ===============================================
+# ✅ Versión mejorada de flatten_results
+# ===============================================
+def flatten_results(raw_json, requested_programs):
+    rows = []
+    if isinstance(raw_json, dict) and "results" in raw_json:
+        for item in raw_json["results"]:
+            if isinstance(item, dict):
+                flat = item.copy()
+
+                # Detectar o asignar el programa
+                if "test" in item:
+                    flat["program"] = item["test"]
+                elif "program" in item:
+                    flat["program"] = item["program"]
+                elif "taskName" in item:
+                    flat["program"] = item["taskName"]
+                else:
+                    # Si no viene, usar el que se solicitó (ej. "network")
+                    if len(requested_programs) == 1:
+                        flat["program"] = requested_programs[0]
                     else:
-                        flat["program"] = "network"  # fallback automático
-                    rows.append(flat)
-        else:
-            st.warning("⚠️ La respuesta no tiene 'results'.")
-        return pd.DataFrame(rows)
+                        flat["program"] = "Desconocido"
 
-    df = flatten_results(data)
+                rows.append(flat)
+    else:
+        st.warning("⚠️ La respuesta no tiene 'results'.")
 
-    if df.empty:
-        st.warning("No se recibieron datos de la API.")
-        st.stop()
+    df_flat = pd.DataFrame(rows)
+    if "program" in df_flat.columns:
+        df_flat["program"] = df_flat["program"].fillna("Desconocido")
+        df_flat.loc[df_flat["program"].str.strip() == "", "program"] = "Desconocido"
 
-    st.session_state.df = df
-    st.success("✅ Datos cargados correctamente.")
+    return df_flat
+
+
+# ===============================================
+# 📦 Cargar los datos
+# ===============================================
+df = flatten_results(data, programas)
+
+if df.empty:
+    st.warning("No se recibieron datos de la API.")
+    st.stop()
+
+st.session_state.df = df
+st.success("✅ Datos cargados correctamente.")
 else:
     df = st.session_state.df
+
 
 # ===========================================================
 # 🔹 Interfaz de gráficos
@@ -276,3 +295,4 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas por ISP.")
+
