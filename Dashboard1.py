@@ -240,6 +240,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
                     hover_data=hover_cols,
                     color_discrete_sequence=px.colors.qualitative.Bold,
                     height=500,
+                    labels={"program": "Tipo de prueba"},
                 )
 
                 fig.update_layout(
@@ -247,6 +248,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
                     mapbox_center={"lat": centro_lat, "lon": centro_lon},
                     mapbox_zoom=zoom_user,
                     margin={"r": 0, "t": 0, "l": 0, "b": 0},
+                    legend_title_text="Programas Medux",
                 )
 
                 st.subheader(f"ISP: {isp}")
@@ -258,6 +260,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
 
 
 
