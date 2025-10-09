@@ -113,11 +113,12 @@ st.sidebar.write(f"Fin local: {datetime.fromtimestamp(ts_end/1000, tz=zona_local
 # ===========================================================
 url = "https://medux-ids.caseonit.com/api/results"
 headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
 body = {
     "tsStart": ts_start,
     "tsEnd": ts_end,
     "format": "raw",
-    "programs": programas,
+    "tests": programas,  # ✅ Se cambió "programs" → "tests"
     "probes": [str(p) for p in probes if pd.notna(p)],
 }
 
@@ -129,6 +130,7 @@ def obtener_datos(url, headers, body):
     else:
         st.error(f"❌ Error API: {response.status_code}")
         return None
+
 
 # ===========================================================
 # 🔹 Lógica de ejecución principal
@@ -142,7 +144,7 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
         st.stop()
 
     # ===============================================
-    # ✅ Nueva función flatten_results (versión correcta)
+    # ✅ Nueva función flatten_results
     # ===============================================
     def flatten_results(raw_json):
         rows = []
@@ -151,25 +153,37 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
             for item in raw_json["results"]:
                 if isinstance(item, dict):
                     flat = item.copy()
-                    # Tomar el valor real del campo "test" como programa
-                    flat["program"] = item.get("test", "Desconocido")
+                    # ✅ Usa el campo correcto del API
+                    flat["program"] = (
+                        item.get("test") or
+                        item.get("taskName") or
+                        "Desconocido"
+                    )
                     rows.append(flat)
         else:
             st.warning("⚠️ La respuesta no tiene el formato esperado (no contiene 'results').")
 
-        return pd.DataFrame(rows)
+        df_flat = pd.DataFrame(rows)
+
+        # ✅ Normaliza el campo program
+        if "program" in df_flat.columns:
+            df_flat["program"] = df_flat["program"].fillna("Desconocido")
+            df_flat.loc[df_flat["program"].str.strip() == "", "program"] = "Desconocido"
+
+        return df_flat
 
     # Convertir respuesta a DataFrame
     df = flatten_results(data)
 
     if df.empty:
-        st.warning("No se recibieron datos de la API.")
+        st.warning("⚠️ No se recibieron datos de la API.")
         st.stop()
 
     st.session_state.df = df
-    st.success("✅ Datos cargados correctamente.")
+    st.success(f"✅ Datos cargados correctamente. {len(df):,} registros recibidos.")
 else:
     df = st.session_state.df
+
 
 # ===========================================================
 # 🔹 Interfaz de gráficos
@@ -277,6 +291,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas por ISP.")
+
 
 
 
