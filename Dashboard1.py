@@ -7,7 +7,7 @@ from io import StringIO
 from datetime import datetime, timedelta, time
 import pytz
 from streamlit_autorefresh import st_autorefresh
-import time
+import time as tm
 
 # ===========================================================
 # 🧠 CONFIGURACIÓN INICIAL
@@ -165,7 +165,7 @@ def obtener_datos_api(url, headers, campo_programas="programs"):
                 break
 
             pagina += 1
-            time.sleep(0.5)
+            tm.sleep(0.5)
 
     st.success(f"✅ Datos cargados correctamente: {len(all_results):,} registros totales.")
     return all_results
@@ -309,3 +309,4 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas por ISP.")
+
