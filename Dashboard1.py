@@ -251,7 +251,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
             )
 
             fig.update_layout(
-                mapbox_style="carto-positron",
+                mapbox_style="open-street-map",
                 mapbox_center={"lat": centro_lat, "lon": centro_lon},
                 mapbox_zoom=zoom_user,
                 margin={"r": 0, "t": 0, "l": 0, "b": 0},
