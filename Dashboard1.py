@@ -189,22 +189,22 @@ else:
     st.info("👈 Configura y presiona **Consultar API** o activa real-time para ver los resultados.")
 
 # ===========================================================
-# 🌍 Mapas de mediciones por ISP (colores fijos por ISP)
+# 🌍 Mapas de mediciones por ISP
 # ===========================================================
 st.markdown("## 🗺️ Mapas por ISP")
 
 if "df" in st.session_state and not st.session_state.df.empty:
     df_plot = st.session_state.df.copy()
 
-    # Verificar columnas de coordenadas y 'isp'
-    if all(col in df_plot.columns for col in ["latitude", "longitude", "isp"]):
+    # Verificar columnas necesarias
+    if all(col in df_plot.columns for col in ["latitude", "longitude", "isp", "program"]):
         df_plot["latitude"] = pd.to_numeric(df_plot["latitude"], errors="coerce")
         df_plot["longitude"] = pd.to_numeric(df_plot["longitude"], errors="coerce")
-        df_plot = df_plot.dropna(subset=["latitude", "longitude", "isp"])
+        df_plot = df_plot.dropna(subset=["latitude", "longitude", "isp", "program"])
 
         if not df_plot.empty:
-            # Colores fijos para cada ISP (ajustar cantidad si hay más ISP)
-            colores_isp = ["blue", "green", "red", "orange", "purple", "cyan"]
+            # Colores fijos para ISP (ajusta según número de ISPs)
+            colores_isp = ["blue", "green", "red", "orange", "purple", "pink"]
 
             for i, isp in enumerate(df_plot["isp"].unique()):
                 df_isp = df_plot[df_plot["isp"] == isp]
@@ -212,12 +212,12 @@ if "df" in st.session_state and not st.session_state.df.empty:
                 if df_isp.empty:
                     continue
 
-                # Centrar en la última medición del ISP
+                # Centrar en última medición del ISP
                 ultimo_punto = df_isp.iloc[-1]
                 centro_lat = ultimo_punto["latitude"]
                 centro_lon = ultimo_punto["longitude"]
 
-                # Zoom automático basado en dispersión
+                # Zoom automático
                 lat_range = df_isp["latitude"].max() - df_isp["latitude"].min()
                 lon_range = df_isp["longitude"].max() - df_isp["longitude"].min()
                 if lat_range < 0.1 and lon_range < 0.1:
@@ -231,14 +231,15 @@ if "df" in st.session_state and not st.session_state.df.empty:
 
                 zoom_user = st.sidebar.slider(f"Zoom para {isp}", 3, 15, int(zoom_auto))
 
-                hover_cols = [c for c in ["latitude", "longitude", "city", "provider", "subtechnology", "avgLatency", "program"] if c in df_isp.columns]
+                # Columnas para hover
+                hover_cols = [c for c in ["latitude", "longitude", "city", "subtechnology", "avgLatency", "program"] if c in df_isp.columns]
 
-                # 🔹 Crear mapa con color fijo por ISP
+                # Crear mapa con color fijo por ISP
                 fig = px.scatter_mapbox(
                     df_isp,
                     lat="latitude",
                     lon="longitude",
-                    hover_name="isp",
+                    hover_name="program",
                     hover_data=hover_cols,
                     color_discrete_sequence=[colores_isp[i % len(colores_isp)]],
                     height=500,
@@ -254,12 +255,15 @@ if "df" in st.session_state and not st.session_state.df.empty:
                 st.subheader(f"ISP: {isp}")
                 st.plotly_chart(fig, use_container_width=True)
                 st.caption(f"Última medición ISP {isp}: ({centro_lat:.4f}, {centro_lon:.4f}) | Zoom: {zoom_user}")
+
         else:
             st.warning("⚠️ No hay coordenadas válidas para mostrar.")
     else:
-        st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
+        st.warning("⚠️ El dataset no contiene 'latitude', 'longitude', 'isp' o 'program'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
+
 
 
 
