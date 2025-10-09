@@ -142,37 +142,66 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
         st.stop()
 
     def flatten_results(raw_json):
+        """
+        Extrae todos los registros tipo 'medición' del JSON y construye un DataFrame plano.
+        Prioriza item['test'] o item['taskName'] para la columna 'program'.
+        """
+    
+        def extract_records(obj, parent_key=None):
+            """Devuelve lista de tuples (record_dict, parent_key) encontrados recursivamente."""
+            records = []
+            if isinstance(obj, dict):
+                # Si este dict parece un registro (tiene campos típicos), lo consideramos
+                if any(k in obj for k in ("probeId", "meduxId", "test", "taskName", "latitude", "avgLatency")):
+                    records.append((obj, parent_key))
+                # seguir buscando recursivamente
+                for k, v in obj.items():
+                    records.extend(extract_records(v, parent_key=k))
+            elif isinstance(obj, list):
+                for item in obj:
+                    records.extend(extract_records(item, parent_key=parent_key))
+            return records
+    
         rows = []
+        recs = extract_records(raw_json, parent_key=None)
     
-        # 🧩 Caso 1: JSON con "results" directo (sin bloques)
-        if "results" in raw_json and isinstance(raw_json["results"], list):
-            for item in raw_json["results"]:
-                flat = item.copy()
-                flat["program"] = item.get("test", "Desconocido")
-                rows.append(flat)
+        for rec, parent in recs:
+            # rec es un dict con los campos de la medición
+            flat = {}
+            for k, v in rec.items():
+                if isinstance(v, dict):
+                    # aplanar sub-dicts
+                    for sk, sv in v.items():
+                        flat[f"{k}_{sk}"] = sv
+                else:
+                    flat[k] = v
     
-        # 🧩 Caso 2: JSON agrupado por bloque (por programa o probe)
-        else:
-            for key, value in raw_json.items():
-                if isinstance(value, dict) and "results" in value and isinstance(value["results"], list):
-                    for item in value["results"]:
-                        flat = item.copy()
-                        # Prioridad: usar campo 'test' si existe; si no, usar el nombre del bloque (key)
-                        flat["program"] = item.get("test", key)
-                        rows.append(flat)
-                elif isinstance(value, list):  # Algunos endpoints pueden devolver lista directa por bloque
-                    for item in value:
-                        flat = item.copy()
-                        flat["program"] = item.get("test", key)
-                        rows.append(flat)
+            # Prioridad para program: test -> taskName -> program -> parent_key -> "Desconocido"
+            program = None
+            if isinstance(rec, dict):
+                program = rec.get("test") or rec.get("taskName") or rec.get("program")
+            if not program:
+                program = parent
+            if not program:
+                program = "Desconocido"
+    
+            flat["program"] = program
+            rows.append(flat)
     
         df = pd.DataFrame(rows)
-    
-        # Normalizar: si aún queda alguno con "Desconocido", intenta recuperar desde el campo test
-        if "test" in df.columns:
-            df["program"] = df["program"].where(df["program"] != "Desconocido", df["test"])
-    
-        return df
+
+    # Normalizar program: string, trim, quitar None
+    if "program" in df.columns:
+        df["program"] = df["program"].astype(str).str.strip()
+    else:
+        df["program"] = "Desconocido"
+
+    # Asegurar columnas básicas para evitar errores más abajo
+    for col in ["latitude", "longitude", "isp", "avgLatency", "city", "provider", "subtechnology"]:
+        if col not in df.columns:
+            df[col] = None
+
+    return df
 
 
 
@@ -189,8 +218,12 @@ else:
 # 🔹 Interfaz de gráficos
 # ===========================================================
 if not df.empty:
+    # Normalización extra por si viene "None" o valores raros
+    df["program"] = df["program"].fillna("Desconocido").astype(str).str.strip()
+    
     st.sidebar.header("📈 Visualización")
     programa = st.sidebar.selectbox("Programa", sorted(df["program"].unique()))
+
     subset = df[df["program"] == programa]
     columnas_numericas = subset.select_dtypes(include="number").columns.tolist()
     columnas_todas = subset.columns.tolist()
@@ -285,6 +318,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude', 'isp' o 'program'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
 
 
 
