@@ -144,23 +144,36 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
     def flatten_results(raw_json):
         rows = []
     
-        # Caso 1: JSON con clave "results" directamente (como el que tienes ahora)
+        # 🧩 Caso 1: JSON con "results" directo (sin bloques)
         if "results" in raw_json and isinstance(raw_json["results"], list):
             for item in raw_json["results"]:
                 flat = item.copy()
                 flat["program"] = item.get("test", "Desconocido")
                 rows.append(flat)
     
-        # Caso 2: JSON anidado por bloques de programa (formato anterior)
+        # 🧩 Caso 2: JSON agrupado por bloque (por programa o probe)
         else:
             for key, value in raw_json.items():
                 if isinstance(value, dict) and "results" in value and isinstance(value["results"], list):
                     for item in value["results"]:
                         flat = item.copy()
-                        flat["program"] = item.get("test", key)  # si no hay 'test', usa la clave
+                        # Prioridad: usar campo 'test' si existe; si no, usar el nombre del bloque (key)
+                        flat["program"] = item.get("test", key)
                         rows.append(flat)
-    
-        return pd.DataFrame(rows)
+                elif isinstance(value, list):  # Algunos endpoints pueden devolver lista directa por bloque
+                    for item in value:
+                        flat = item.copy()
+                        flat["program"] = item.get("test", key)
+                        rows.append(flat)
+
+    df = pd.DataFrame(rows)
+
+    # Normalizar: si aún queda alguno con "Desconocido", intenta recuperar desde el campo test
+    if "test" in df.columns:
+        df["program"] = df["program"].where(df["program"] != "Desconocido", df["test"])
+
+    return df
+
 
     df = flatten_results(data)
     if df.empty:
@@ -271,6 +284,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude', 'isp' o 'program'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
 
 
 
