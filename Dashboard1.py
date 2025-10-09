@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import requests
+import json
+from io import StringIO
 from datetime import datetime, timedelta, time
 import pytz
 from streamlit_autorefresh import st_autorefresh
@@ -17,7 +19,7 @@ st.title("📊 Dashboard de Datos RAW – Medux API")
 # ===========================================================
 st.sidebar.header("🔐 Configuración API")
 
-# Token: pegarlo o cargar archivo
+# Token: puedes pegarlo o cargarlo desde archivo
 token_input = st.sidebar.text_input("Token Bearer", type="password")
 token_file = st.sidebar.file_uploader("O subir archivo de token (.txt)", type=["txt"])
 if token_file is not None:
@@ -46,8 +48,7 @@ st.sidebar.header("⚙️ Parámetros de consulta")
 
 programas = st.sidebar.multiselect(
     "Selecciona los programas",
-    ["http-upload-burst-test", "http-down-burst-test", "ping-test",
-     "network","voice-out","cloud-download","cloud-upload"],
+    ["http-upload-burst-test", "http-down-burst-test", "ping-test","network"],
     default=["ping-test"]
 )
 
@@ -66,6 +67,7 @@ hora_fin_defecto = time(ahora_local.hour, ahora_local.minute)
 st.sidebar.markdown("---")
 st.sidebar.header("📅 Rango de fechas y horas (hora local)")
 
+# Inicializar session_state
 for key, default in [("fecha_inicio", fecha_inicio_defecto), ("hora_inicio", hora_inicio_defecto),
                      ("fecha_fin", fecha_fin_defecto), ("hora_fin", hora_fin_defecto)]:
     if key not in st.session_state:
@@ -101,6 +103,7 @@ else:
     ts_start = int(dt_inicio_local.astimezone(pytz.utc).timestamp() * 1000)
     ts_end = int(dt_fin_local.astimezone(pytz.utc).timestamp() * 1000)
 
+# Mostrar resumen en el sidebar
 st.sidebar.markdown("### 🕒 Rango seleccionado")
 st.sidebar.write(f"Inicio local: {datetime.fromtimestamp(ts_start/1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')}")
 st.sidebar.write(f"Fin local: {datetime.fromtimestamp(ts_end/1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')}")
@@ -128,17 +131,6 @@ def obtener_datos(url, headers, body):
         return None
 
 # ===========================================================
-# 🔹 Flatten results
-# ===========================================================
-def flatten_results(raw_json):
-    rows = []
-    for item in raw_json.get("results", []):
-        flat = item.copy()
-        flat["program"] = item.get("test") or item.get("program") or "Desconocido"
-        rows.append(flat)
-    return pd.DataFrame(rows)
-
-# ===========================================================
 # 🔹 Lógica de ejecución principal
 # ===========================================================
 if "df" not in st.session_state:
@@ -149,12 +141,24 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
     if not data:
         st.stop()
 
+    def flatten_results(raw_json):
+        rows = []
+        for program, results in raw_json.items():
+            if not isinstance(results, list) or len(results) == 0:
+                continue
+            for item in results:
+                flat = {"program": program}
+                if isinstance(item, dict):
+                    flat.update(item)
+                rows.append(flat)
+        return pd.DataFrame(rows)
+
     df = flatten_results(data)
     if df.empty:
         st.warning("No se recibieron datos de la API.")
         st.stop()
     st.session_state.df = df
-    st.success(f"✅ Datos cargados correctamente: {len(df):,} registros.")
+    st.success("✅ Datos cargados correctamente.")
 else:
     df = st.session_state.df
 
@@ -185,65 +189,80 @@ else:
     st.info("👈 Configura y presiona **Consultar API** o activa real-time para ver los resultados.")
 
 # ===========================================================
-# 🌍 Mapas de mediciones por ISP
+# 🌍 Mapa de mediciones centrado en la última coordenada
 # ===========================================================
-st.markdown("## 🗺️ Mapas por ISP")
+st.markdown("## 🗺️ Mapa de mediciones")
 
-if not df.empty:
-    df_plot = df.copy()
-    if all(col in df_plot.columns for col in ["latitude", "longitude", "isp", "program"]):
+if "df" in st.session_state and not st.session_state.df.empty:
+    df_plot = st.session_state.df.copy()
+
+    # Asegurarse de que existan columnas de coordenadas
+    if "latitude" in df_plot.columns and "longitude" in df_plot.columns:
         df_plot["latitude"] = pd.to_numeric(df_plot["latitude"], errors="coerce")
         df_plot["longitude"] = pd.to_numeric(df_plot["longitude"], errors="coerce")
-        df_plot = df_plot.dropna(subset=["latitude", "longitude", "isp", "program"])
+        df_plot = df_plot.dropna(subset=["latitude", "longitude"])
 
         if not df_plot.empty:
-            colores_isp = ["blue", "green", "red", "orange", "purple", "pink"]
+            # 📌 Centrar en la última coordenada
+            ultimo_punto = df_plot.iloc[-1]
+            centro_lat = ultimo_punto["latitude"]
+            centro_lon = ultimo_punto["longitude"]
 
-            for i, isp in enumerate(df_plot["isp"].unique()):
-                df_isp = df_plot[df_plot["isp"] == isp]
-                ultimo_punto = df_isp.iloc[-1]
-                centro_lat = ultimo_punto["latitude"]
-                centro_lon = ultimo_punto["longitude"]
+            # Calcular dispersión para zoom automático
+            lat_range = df_plot["latitude"].max() - df_plot["latitude"].min()
+            lon_range = df_plot["longitude"].max() - df_plot["longitude"].min()
 
-                lat_range = df_isp["latitude"].max() - df_isp["latitude"].min()
-                lon_range = df_isp["longitude"].max() - df_isp["longitude"].min()
-                if lat_range < 0.1 and lon_range < 0.1:
-                    zoom_auto = 15
-                elif lat_range < 1 and lon_range < 1:
-                    zoom_auto = 14
-                elif lat_range < 5 and lon_range < 5:
-                    zoom_auto = 12
-                else:
-                    zoom_auto = 10
+            if lat_range < 0.1 and lon_range < 0.1:
+                zoom_auto = 15
+            elif lat_range < 1 and lon_range < 1:
+                zoom_auto = 14
+            elif lat_range < 5 and lon_range < 5:
+                zoom_auto = 12
+            else:
+                zoom_auto = 10
 
-                zoom_user = st.sidebar.slider(f"Zoom para {isp}", 3, 15, int(zoom_auto))
+            # Slider de zoom manual
+            zoom_user = st.sidebar.slider("🔍 Nivel de zoom del mapa", 3, 15, int(zoom_auto))
 
-                hover_cols = [c for c in ["latitude", "longitude", "city", "subtechnology", "avgLatency", "program"] if c in df_isp.columns]
+            # Determinar columna de color disponible
+            if "program" in df_plot.columns:
+                color_col = "program"
+            elif "isp" in df_plot.columns:
+                color_col = "isp"
+            elif "provider" in df_plot.columns:
+                color_col = "provider"
+            else:
+                color_col = None
 
-                fig = px.scatter_mapbox(
-                    df_isp,
-                    lat="latitude",
-                    lon="longitude",
-                    hover_name="program",
-                    hover_data=hover_cols,
-                    color_discrete_sequence=[colores_isp[i % len(colores_isp)]],
-                    height=500,
-                )
+            # Columnas existentes para hover
+            hover_cols = [c for c in ["latitude", "longitude", "city", "isp", "provider", "subtechnology", "avgLatency"] if c in df_plot.columns]
+            hover_name_col = "program" if "program" in df_plot.columns else None
 
-                fig.update_layout(
-                    mapbox_style="carto-positron",
-                    mapbox_center={"lat": centro_lat, "lon": centro_lon},
-                    mapbox_zoom=zoom_user,
-                    margin={"r": 0, "t": 0, "l": 0, "b": 0},
-                )
+            # Crear mapa
+            fig = px.scatter_mapbox(
+                df_plot,
+                lat="latitude",
+                lon="longitude",
+                color=color_col,
+                hover_name=hover_name_col,
+                hover_data=hover_cols,
+                color_discrete_sequence=px.colors.qualitative.Bold,
+                height=600,
+            )
 
-                st.subheader(f"ISP: {isp}")
-                st.plotly_chart(fig, use_container_width=True)
-                st.caption(f"Última medición ISP {isp}: ({centro_lat:.4f}, {centro_lon:.4f}) | Zoom: {zoom_user}")
+            fig.update_layout(
+                mapbox_style="carto-positron",
+                mapbox_center={"lat": centro_lat, "lon": centro_lon},
+                mapbox_zoom=zoom_user,
+                margin={"r": 0, "t": 0, "l": 0, "b": 0},
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption(f"🗺️ Última medición: ({centro_lat:.4f}, {centro_lon:.4f}) | Zoom: {zoom_user}")
 
         else:
-            st.warning("⚠️ No hay coordenadas válidas para mostrar.")
+            st.warning("⚠️ No hay coordenadas válidas para mostrar en el mapa.")
     else:
-        st.warning("⚠️ El dataset no contiene 'latitude', 'longitude', 'isp' o 'program'.")
+        st.warning("⚠️ El dataset no contiene columnas 'latitude' y 'longitude'.")
 else:
-    st.info("👈 Consulta primero la API para visualizar los mapas.")
+    st.info("👈 Consulta primero la API para visualizar el mapa.")
