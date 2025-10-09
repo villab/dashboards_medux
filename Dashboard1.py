@@ -152,7 +152,7 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
                     # Tomar el nombre del programa real (campo 'test')
                     flat["program"] = item.get("test", "Desconocido")
                     rows.append(flat)
-        return pd.DataFrame(rows))
+        return pd.DataFrame(rows)
 
     df = flatten_results(data)
     if df.empty:
@@ -263,6 +263,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude', 'isp' o 'program'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
 
 
 
