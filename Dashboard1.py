@@ -231,4 +231,19 @@ if not df.empty:
                 )
 
                 fig.update_layout(
-                   
+                    mapbox_style="carto-positron",
+                    mapbox_center={"lat": centro_lat, "lon": centro_lon},
+                    mapbox_zoom=zoom_user,
+                    margin={"r": 0, "t": 0, "l": 0, "b": 0},
+                )
+
+                st.subheader(f"ISP: {isp}")
+                st.plotly_chart(fig, use_container_width=True)
+                st.caption(f"Última medición ISP {isp}: ({centro_lat:.4f}, {centro_lon:.4f}) | Zoom: {zoom_user}")
+
+        else:
+            st.warning("⚠️ No hay coordenadas válidas para mostrar.")
+    else:
+        st.warning("⚠️ El dataset no contiene 'latitude', 'longitude', 'isp' o 'program'.")
+else:
+    st.info("👈 Consulta primero la API para visualizar los mapas.")
