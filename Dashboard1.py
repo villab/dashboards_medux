@@ -115,17 +115,26 @@ st.sidebar.write(f"Inicio local: {datetime.fromtimestamp(ts_start/1000, tz=zona_
 st.sidebar.write(f"Fin local: {datetime.fromtimestamp(ts_end/1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ===========================================================
+# 🧩 Función auxiliar para construir el body dinámicamente
+# ===========================================================
+def construir_body(campo_programas: str):
+    """
+    Construye dinámicamente el body según el nombre del campo ('tests' o 'programs')
+    para adaptarse a las diferencias de la API.
+    """
+    return {
+        "tsStart": ts_start,
+        "tsEnd": ts_end,
+        "format": "raw",
+        campo_programas: programas,   # usa el campo dinámico
+        "probes": [str(p) for p in probes if pd.notna(p)],
+    }
+
+# ===========================================================
 # 🔹 Llamada a la API
 # ===========================================================
 url = "https://medux-ids.caseonit.com/api/results"
 headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-body = {
-    "tsStart": ts_start,
-    "tsEnd": ts_end,
-    "format": "raw",
-    "programs": programas,
-    "probes": [str(p) for p in probes if pd.notna(p)],
-}
 
 @st.cache_data(ttl=1800)
 def obtener_datos(url, headers, body):
@@ -137,36 +146,29 @@ def obtener_datos(url, headers, body):
             st.error(f"❌ Error API {response.status_code}: {response.json()}")
         except:
             st.error(f"❌ Error API {response.status_code}: {response.text}")
+        # Mostrar respuesta cruda para depuración
+        st.text_area("🧾 Respuesta cruda de la API:", response.text, height=200)
         return None
 
 # ===========================================================
-# 🔹 Ejecución principal (versión depurada)
+# 🔹 Ejecución principal
 # ===========================================================
 if st.sidebar.button("🚀 Consultar API") or usar_real_time:
     try:
-        # Intentar primero con 'tests'
         body = construir_body("tests")
         data = obtener_datos(url, headers, body)
 
-        # Si da error 400, probar con 'programs'
-        if isinstance(data, dict) and "error" in data and data["error"] == 400:
-            st.warning("⚠️ El campo 'tests' no fue aceptado por la API, probando con 'programs'...")
+        # Si la API no acepta "tests", probar con "programs"
+        if not data:
+            st.warning("⚠️ Reintentando con campo 'programs'...")
             body = construir_body("programs")
             data = obtener_datos(url, headers, body)
 
-        # Validar respuesta
-        if not isinstance(data, dict):
-            st.error("❌ La API devolvió un tipo inesperado de respuesta.")
-            st.write("Tipo recibido:", type(data))
-            st.stop()
-
-        if "error" in data:
-            st.error(f"❌ Error API: {data['error']}")
-            st.text(data.get("text", ""))
+        if not data:
             st.stop()
 
         if "results" not in data:
-            st.error("⚠️ La respuesta no contiene la clave 'results'.")
+            st.error("⚠️ La respuesta no contiene 'results'.")
             st.json(data)
             st.stop()
 
@@ -178,17 +180,9 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
             for item in raw_json.get("results", []):
                 if isinstance(item, dict):
                     flat = item.copy()
-                    if "test" in item:
-                        flat["program"] = item["test"]
-                    elif "program" in item:
-                        flat["program"] = item["program"]
-                    elif "taskName" in item:
-                        flat["program"] = item["taskName"]
-                    else:
-                        # Fallback: si se pidió solo 1 programa, usar ese
-                        flat["program"] = (
-                            requested_programs[0] if len(requested_programs) == 1 else "Desconocido"
-                        )
+                    flat["program"] = item.get("test") or item.get("program") or item.get("taskName") or (
+                        requested_programs[0] if len(requested_programs) == 1 else "Desconocido"
+                    )
                     rows.append(flat)
 
             df_flat = pd.DataFrame(rows)
@@ -201,7 +195,7 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
 
         if df.empty:
             st.warning("⚠️ No se recibieron datos válidos o 'results' está vacío.")
-            st.json(data)  # 👈 muestra lo que devolvió la API
+            st.json(data)
             st.stop()
 
         st.session_state.df = df
@@ -213,28 +207,10 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
         st.exception(e)
         st.error("❌ Ocurrió un error inesperado durante la consulta.")
 else:
-    df = st.session_state.df
-
-# ===============================================
-# 📦 Cargar datos en sesión
-# ===============================================
-if "df" not in st.session_state:
-    st.info("🚀 Procesando respuesta de la API...")
-    df = flatten_results(data, programas)
-
-    if df.empty:
-        st.warning("⚠️ No se recibieron datos o no se pudo procesar la API.")
-        st.stop()
-
-    st.session_state.df = df
-    st.success("✅ Datos cargados correctamente.")
-    st.write("📊 Conteo por programa:", df["program"].value_counts())
-else:
-    df = st.session_state.df
-
+    df = st.session_state.df if "df" in st.session_state else pd.DataFrame()
 
 # ===========================================================
-# 🔹 Interfaz de gráficos
+# 📈 Visualización
 # ===========================================================
 if not df.empty:
     st.sidebar.header("📈 Visualización")
@@ -327,8 +303,3 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas por ISP.")
-
-
-
-
-
