@@ -1,5 +1,3 @@
-#version antes del paginado
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -21,6 +19,7 @@ st.title("📊 Dashboard de Datos RAW – Medux API")
 # ===========================================================
 st.sidebar.header("🔐 Configuración API")
 
+# Token: puedes pegarlo o cargarlo desde archivo
 token_input = st.sidebar.text_input("Token Bearer", type="password")
 token_file = st.sidebar.file_uploader("O subir archivo de token (.txt)", type=["txt"])
 if token_file is not None:
@@ -49,15 +48,7 @@ st.sidebar.header("⚙️ Parámetros de consulta")
 
 programas = st.sidebar.multiselect(
     "Selecciona los programas",
-    [
-        "http-upload-burst-test",
-        "http-down-burst-test",
-        "ping-test",
-        "network",
-        "voice-out",
-        "cloud-download",
-        "cloud-upload"
-    ],
+    ["http-upload-burst-test", "http-down-burst-test", "ping-test","network","voice-out","cloud-download","cloud-upload"],
     default=["ping-test"]
 )
 
@@ -76,6 +67,7 @@ hora_fin_defecto = time(ahora_local.hour, ahora_local.minute)
 st.sidebar.markdown("---")
 st.sidebar.header("📅 Rango de fechas y horas (hora local)")
 
+# Inicializar session_state
 for key, default in [("fecha_inicio", fecha_inicio_defecto), ("hora_inicio", hora_inicio_defecto),
                      ("fecha_fin", fecha_fin_defecto), ("hora_fin", hora_fin_defecto)]:
     if key not in st.session_state:
@@ -117,26 +109,17 @@ st.sidebar.write(f"Inicio local: {datetime.fromtimestamp(ts_start/1000, tz=zona_
 st.sidebar.write(f"Fin local: {datetime.fromtimestamp(ts_end/1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ===========================================================
-# 🧩 Función auxiliar para construir el body dinámicamente
-# ===========================================================
-def construir_body(campo_programas: str):
-    """
-    Construye dinámicamente el body según el nombre del campo ('tests' o 'programs')
-    para adaptarse a las diferencias de la API.
-    """
-    return {
-        "tsStart": ts_start,
-        "tsEnd": ts_end,
-        "format": "raw",
-        campo_programas: programas,   # usa el campo dinámico
-        "probes": [str(p) for p in probes if pd.notna(p)],
-    }
-
-# ===========================================================
 # 🔹 Llamada a la API
 # ===========================================================
 url = "https://medux-ids.caseonit.com/api/results"
 headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+body = {
+    "tsStart": ts_start,
+    "tsEnd": ts_end,
+    "format": "raw",
+    "programs": programas,
+    "probes": [str(p) for p in probes if pd.notna(p)],
+}
 
 @st.cache_data(ttl=1800)
 def obtener_datos(url, headers, body):
@@ -144,75 +127,44 @@ def obtener_datos(url, headers, body):
     if response.status_code == 200:
         return response.json()
     else:
-        try:
-            st.error(f"❌ Error API {response.status_code}: {response.json()}")
-        except:
-            st.error(f"❌ Error API {response.status_code}: {response.text}")
-        # Mostrar respuesta cruda para depuración
-        st.text_area("🧾 Respuesta cruda de la API:", response.text, height=200)
+        st.error(f"❌ Error API: {response.status_code}")
         return None
 
 # ===========================================================
-# 🔹 Ejecución principal
+# 🔹 Lógica de ejecución principal
 # ===========================================================
+if "df" not in st.session_state:
+    st.session_state.df = pd.DataFrame()
+
 if st.sidebar.button("🚀 Consultar API") or usar_real_time:
-    try:
-        body = construir_body("tests")
-        data = obtener_datos(url, headers, body)
+    data = obtener_datos(url, headers, body)
+    if not data:
+        st.stop()
 
-        # Si la API no acepta "tests", probar con "programs"
-        if not data:
-            st.warning("⚠️ Reintentando con campo 'programs'...")
-            body = construir_body("programs")
-            data = obtener_datos(url, headers, body)
-
-        if not data:
-            st.stop()
-
-        if "results" not in data:
-            st.error("⚠️ La respuesta no contiene 'results'.")
-            st.json(data)
-            st.stop()
-
-        # ===============================================
-        # ✅ Procesar resultados con flatten_results
-        # ===============================================
-        def flatten_results(raw_json, requested_programs):
-            rows = []
-            for item in raw_json.get("results", []):
-                if isinstance(item, dict):
+    def flatten_results(raw_json):
+        rows = []
+        # raw_json es un dict que tiene keys de dispositivos o programas
+        for key, value in raw_json.items():
+            # 'value' es un dict que contiene 'results' (lista)
+            if "results" in value and isinstance(value["results"], list):
+                for item in value["results"]:
                     flat = item.copy()
-                    flat["program"] = item.get("test") or item.get("program") or item.get("taskName") or (
-                        requested_programs[0] if len(requested_programs) == 1 else "Desconocido"
-                    )
+                    # Tomar el nombre del programa real (campo 'test')
+                    flat["program"] = item.get("test", "Desconocido")
                     rows.append(flat)
+        return pd.DataFrame(rows)
 
-            df_flat = pd.DataFrame(rows)
-            if not df_flat.empty:
-                df_flat["program"] = df_flat["program"].fillna("Desconocido")
-                df_flat.loc[df_flat["program"].str.strip() == "", "program"] = "Desconocido"
-            return df_flat
-
-        df = flatten_results(data, programas)
-
-        if df.empty:
-            st.warning("⚠️ No se recibieron datos válidos o 'results' está vacío.")
-            st.json(data)
-            st.stop()
-
-        st.session_state.df = df
-        st.success(f"✅ Datos cargados correctamente. {len(df):,} registros recibidos.")
-        st.write("📊 Distribución por programa:")
-        st.write(df["program"].value_counts())
-
-    except Exception as e:
-        st.exception(e)
-        st.error("❌ Ocurrió un error inesperado durante la consulta.")
+    df = flatten_results(data)
+    if df.empty:
+        st.warning("No se recibieron datos de la API.")
+        st.stop()
+    st.session_state.df = df
+    st.success("✅ Datos cargados correctamente.")
 else:
-    df = st.session_state.df if "df" in st.session_state else pd.DataFrame()
+    df = st.session_state.df
 
 # ===========================================================
-# 📈 Visualización
+# 🔹 Interfaz de gráficos
 # ===========================================================
 if not df.empty:
     st.sidebar.header("📈 Visualización")
@@ -238,54 +190,59 @@ else:
     st.info("👈 Configura y presiona **Consultar API** o activa real-time para ver los resultados.")
 
 # ===========================================================
-# 🌍 Mapas por ISP
+# 🌍 Mapas de mediciones por ISP
 # ===========================================================
 st.markdown("## 🗺️ Mapas por ISP")
 
 if "df" in st.session_state and not st.session_state.df.empty:
     df_plot = st.session_state.df.copy()
 
-    if all(col in df_plot.columns for col in ["latitude", "longitude", "isp"]):
+    # Verificar columnas necesarias
+    if all(col in df_plot.columns for col in ["latitude", "longitude", "isp", "program"]):
         df_plot["latitude"] = pd.to_numeric(df_plot["latitude"], errors="coerce")
         df_plot["longitude"] = pd.to_numeric(df_plot["longitude"], errors="coerce")
-        df_plot = df_plot.dropna(subset=["latitude", "longitude", "isp"])
+        df_plot = df_plot.dropna(subset=["latitude", "longitude", "isp", "program"])
 
         if not df_plot.empty:
-            isps = df_plot["isp"].unique().tolist()
-            colores = px.colors.qualitative.Bold
+            # Colores fijos para ISP (ajusta según número de ISPs)
+            colores_isp = ["blue", "green", "red", "orange", "purple", "pink"]
 
-            for i, isp in enumerate(isps):
+            for i, isp in enumerate(df_plot["isp"].unique()):
                 df_isp = df_plot[df_plot["isp"] == isp]
+
                 if df_isp.empty:
                     continue
 
+                # Centrar en última medición del ISP
                 ultimo_punto = df_isp.iloc[-1]
                 centro_lat = ultimo_punto["latitude"]
                 centro_lon = ultimo_punto["longitude"]
 
+                # Zoom automático
                 lat_range = df_isp["latitude"].max() - df_isp["latitude"].min()
                 lon_range = df_isp["longitude"].max() - df_isp["longitude"].min()
-
                 if lat_range < 0.1 and lon_range < 0.1:
                     zoom_auto = 15
                 elif lat_range < 1 and lon_range < 1:
-                    zoom_auto = 13
+                    zoom_auto = 14
                 elif lat_range < 5 and lon_range < 5:
-                    zoom_auto = 11
+                    zoom_auto = 12
                 else:
-                    zoom_auto = 9
+                    zoom_auto = 10
 
-                zoom_user = st.sidebar.slider(f"🔍 Zoom para {isp}", 3, 15, int(zoom_auto))
-                hover_cols = [c for c in ["latitude", "longitude", "city", "program", "subtechnology", "avgLatency"] if c in df_isp.columns]
+                zoom_user = st.sidebar.slider(f"Zoom para {isp}", 3, 15, int(zoom_auto))
 
+                # Columnas para hover
+                hover_cols = [c for c in ["latitude", "longitude", "city", "subtechnology", "avgLatency", "program"] if c in df_isp.columns]
+
+                # Crear mapa con color fijo por ISP
                 fig = px.scatter_mapbox(
                     df_isp,
                     lat="latitude",
                     lon="longitude",
-                    color="program" if "program" in df_isp.columns else None,
-                    hover_name="program" if "program" in df_isp.columns else None,
+                    hover_name="program",
                     hover_data=hover_cols,
-                    color_discrete_sequence=[colores[i % len(colores)]],
+                    color_discrete_sequence=[colores_isp[i % len(colores_isp)]],
                     height=500,
                 )
 
@@ -296,13 +253,13 @@ if "df" in st.session_state and not st.session_state.df.empty:
                     margin={"r": 0, "t": 0, "l": 0, "b": 0},
                 )
 
-                st.subheader(f"🗺️ ISP: {isp}")
+                st.subheader(f"ISP: {isp}")
                 st.plotly_chart(fig, use_container_width=True)
-                st.caption(f"Última medición para {isp}: ({centro_lat:.4f}, {centro_lon:.4f}) | Zoom: {zoom_user}")
-        else:
-            st.warning("⚠️ No hay coordenadas válidas para mostrar en los mapas.")
-    else:
-        st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
-else:
-    st.info("👈 Consulta primero la API para visualizar los mapas por ISP.")
+                st.caption(f"Última medición ISP {isp}: ({centro_lat:.4f}, {centro_lon:.4f}) | Zoom: {zoom_user}")
 
+        else:
+            st.warning("⚠️ No hay coordenadas válidas para mostrar.")
+    else:
+        st.warning("⚠️ El dataset no contiene 'latitude', 'longitude', 'isp' o 'program'.")
+else:
+    st.info("👈 Consulta primero la API para visualizar los mapas.")
