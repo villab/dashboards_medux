@@ -143,15 +143,16 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
 
     def flatten_results(raw_json):
         rows = []
-        for program, results in raw_json.items():
-            if not isinstance(results, list) or len(results) == 0:
-                continue
-            for item in results:
-                flat = {"program": program}
-                if isinstance(item, dict):
-                    flat.update(item)
-                rows.append(flat)
-        return pd.DataFrame(rows)
+        # raw_json es un dict que tiene keys de dispositivos o programas
+        for key, value in raw_json.items():
+            # 'value' es un dict que contiene 'results' (lista)
+            if "results" in value and isinstance(value["results"], list):
+                for item in value["results"]:
+                    flat = item.copy()
+                    # Tomar el nombre del programa real (campo 'test')
+                    flat["program"] = item.get("test", "Desconocido")
+                    rows.append(flat)
+        return pd.DataFrame(rows))
 
     df = flatten_results(data)
     if df.empty:
@@ -262,6 +263,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude', 'isp' o 'program'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
 
 
 
