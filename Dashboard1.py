@@ -143,15 +143,23 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
 
     def flatten_results(raw_json):
         rows = []
-        # raw_json es un dict que tiene keys de dispositivos o programas
-        for key, value in raw_json.items():
-            # 'value' es un dict que contiene 'results' (lista)
-            if "results" in value and isinstance(value["results"], list):
-                for item in value["results"]:
-                    flat = item.copy()
-                    # Tomar el nombre del programa real (campo 'test')
-                    flat["program"] = item.get("test", "Desconocido")
-                    rows.append(flat)
+    
+        # Caso 1: JSON con clave "results" directamente (como el que tienes ahora)
+        if "results" in raw_json and isinstance(raw_json["results"], list):
+            for item in raw_json["results"]:
+                flat = item.copy()
+                flat["program"] = item.get("test", "Desconocido")
+                rows.append(flat)
+    
+        # Caso 2: JSON anidado por bloques de programa (formato anterior)
+        else:
+            for key, value in raw_json.items():
+                if isinstance(value, dict) and "results" in value and isinstance(value["results"], list):
+                    for item in value["results"]:
+                        flat = item.copy()
+                        flat["program"] = item.get("test", key)  # si no hay 'test', usa la clave
+                        rows.append(flat)
+    
         return pd.DataFrame(rows)
 
     df = flatten_results(data)
@@ -263,6 +271,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude', 'isp' o 'program'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
 
 
 
