@@ -198,6 +198,11 @@ if "df" not in st.session_state:
 
     st.session_state.df = df
     st.success("✅ Datos cargados correctamente.")
+
+    # 🔍 Verificación: mostrar cuántos registros hay por programa
+    st.subheader("📊 Conteo de registros por programa")
+    st.write(df["program"].value_counts())
+
 else:
     df = st.session_state.df
 
@@ -295,5 +300,6 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas por ISP.")
+
 
 
