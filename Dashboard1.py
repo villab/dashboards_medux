@@ -190,18 +190,18 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
     
         df = pd.DataFrame(rows)
 
-    # Normalizar program: string, trim, quitar None
-    if "program" in df.columns:
-        df["program"] = df["program"].astype(str).str.strip()
-    else:
-        df["program"] = "Desconocido"
-
-    # Asegurar columnas básicas para evitar errores más abajo
-    for col in ["latitude", "longitude", "isp", "avgLatency", "city", "provider", "subtechnology"]:
-        if col not in df.columns:
-            df[col] = None
-
-    return df
+        # Normalizar program: string, trim, quitar None
+        if "program" in df.columns:
+            df["program"] = df["program"].astype(str).str.strip()
+        else:
+            df["program"] = "Desconocido"
+    
+        # Asegurar columnas básicas para evitar errores más abajo
+        for col in ["latitude", "longitude", "isp", "avgLatency", "city", "provider", "subtechnology"]:
+            if col not in df.columns:
+                df[col] = None
+    
+        return df
 
 
 
@@ -318,6 +318,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude', 'isp' o 'program'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
 
 
 
