@@ -131,59 +131,107 @@ def construir_body(campo_programas: str):
     }
 
 # ===========================================================
-# 🔹 Llamada a la API
+# 🔹 Llamada a la API con paginación
 # ===========================================================
 url = "https://medux-ids.caseonit.com/api/results"
 headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
-@st.cache_data(ttl=1800)
-def obtener_datos(url, headers, body):
-    response = requests.post(url, headers=headers, json=body)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        try:
-            st.error(f"❌ Error API {response.status_code}: {response.json()}")
-        except:
-            st.error(f"❌ Error API {response.status_code}: {response.text}")
-        # Mostrar respuesta cruda para depuración
-        st.text_area("🧾 Respuesta cruda de la API:", response.text, height=200)
-        return None
+
+def construir_body(campo_programas: str, paginate=False, pit=None, search_after=None):
+    """
+    Construye dinámicamente el body según el nombre del campo ('tests' o 'programs'),
+    e incluye paginación si es necesario.
+    """
+    body = {
+        "tsStart": ts_start,
+        "tsEnd": ts_end,
+        "format": "raw",
+        campo_programas: programas,
+        "probes": [str(p) for p in probes if pd.notna(p)],
+    }
+    if paginate:
+        body["paginate"] = True
+        body["size"] = 10000  # tamaño máximo por página
+        if pit:
+            body["pit"] = pit
+        if search_after:
+            body["search_after"] = search_after
+    return body
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def obtener_datos_paginados(url, headers, campo_programas):
+    """
+    Descarga todas las páginas disponibles usando 'paginate', 'pit' y 'search_after'.
+    """
+    all_results = []
+    pit = None
+    search_after = None
+    pagina = 1
+
+    with st.spinner("📡 Consultando API con paginación..."):
+        while True:
+            body = construir_body(campo_programas, paginate=True, pit=pit, search_after=search_after)
+            response = requests.post(url, headers=headers, json=body)
+
+            if response.status_code != 200:
+                try:
+                    st.error(f"❌ Error API {response.status_code}: {response.json()}")
+                except Exception:
+                    st.error(f"❌ Error API {response.status_code}: {response.text}")
+                break
+
+            data = response.json()
+            results = data.get("results", [])
+            if not results:
+                break
+
+            all_results.extend(results)
+
+            st.info(f"📥 Página {pagina} → {len(results):,} registros (total acumulado: {len(all_results):,})")
+
+            pit = data.get("pit")
+            search_after = data.get("search_after")
+
+            if not pit or not search_after:
+                break  # sin más páginas
+
+            pagina += 1
+
+    return all_results
+
 
 # ===========================================================
 # 🔹 Ejecución principal
 # ===========================================================
 if st.sidebar.button("🚀 Consultar API") or usar_real_time:
     try:
-        body = construir_body("tests")
-        data = obtener_datos(url, headers, body)
+        # Intentar con campo "tests"
+        results = obtener_datos_paginados(url, headers, "tests")
 
-        # Si la API no acepta "tests", probar con "programs"
-        if not data:
+        if not results:
             st.warning("⚠️ Reintentando con campo 'programs'...")
-            body = construir_body("programs")
-            data = obtener_datos(url, headers, body)
+            results = obtener_datos_paginados(url, headers, "programs")
 
-        if not data:
-            st.stop()
-
-        if "results" not in data:
-            st.error("⚠️ La respuesta no contiene 'results'.")
-            st.json(data)
+        if not results:
+            st.error("❌ No se recibieron datos válidos de la API.")
             st.stop()
 
         # ===============================================
-        # ✅ Procesar resultados con flatten_results
+        # ✅ Procesar resultados
         # ===============================================
-        def flatten_results(raw_json, requested_programs):
+        def flatten_results(results, requested_programs):
             rows = []
-            for item in raw_json.get("results", []):
-                if isinstance(item, dict):
-                    flat = item.copy()
-                    flat["program"] = item.get("test") or item.get("program") or item.get("taskName") or (
-                        requested_programs[0] if len(requested_programs) == 1 else "Desconocido"
-                    )
-                    rows.append(flat)
+            for item in results:
+                flat = item.copy()
+                flat["program"] = (
+                    item.get("test")
+                    or item.get("program")
+                    or item.get("taskName")
+                    or ("network" if "rssi" in item else None)
+                    or (requested_programs[0] if len(requested_programs) == 1 else "Desconocido")
+                )
+                rows.append(flat)
 
             df_flat = pd.DataFrame(rows)
             if not df_flat.empty:
@@ -191,15 +239,14 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
                 df_flat.loc[df_flat["program"].str.strip() == "", "program"] = "Desconocido"
             return df_flat
 
-        df = flatten_results(data, programas)
+        df = flatten_results(results, programas)
 
         if df.empty:
             st.warning("⚠️ No se recibieron datos válidos o 'results' está vacío.")
-            st.json(data)
             st.stop()
 
         st.session_state.df = df
-        st.success(f"✅ Datos cargados correctamente. {len(df):,} registros recibidos.")
+        st.success(f"✅ Datos cargados correctamente: {len(df):,} registros totales.")
         st.write("📊 Distribución por programa:")
         st.write(df["program"].value_counts())
 
@@ -303,3 +350,4 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas por ISP.")
+
