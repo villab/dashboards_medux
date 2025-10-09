@@ -141,28 +141,31 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
     if not data:
         st.stop()
 
+    # ===============================================
+    # ✅ Nueva función flatten_results (versión correcta)
+    # ===============================================
     def flatten_results(raw_json):
         rows = []
-    
         # Si la respuesta tiene directamente "results"
         if isinstance(raw_json, dict) and "results" in raw_json:
             for item in raw_json["results"]:
                 if isinstance(item, dict):
                     flat = item.copy()
-                    # El campo correcto del programa es "test"
+                    # Tomar el valor real del campo "test" como programa
                     flat["program"] = item.get("test", "Desconocido")
                     rows.append(flat)
         else:
             st.warning("⚠️ La respuesta no tiene el formato esperado (no contiene 'results').")
-    
+
         return pd.DataFrame(rows)
 
-
-
+    # Convertir respuesta a DataFrame
     df = flatten_results(data)
+
     if df.empty:
         st.warning("No se recibieron datos de la API.")
         st.stop()
+
     st.session_state.df = df
     st.success("✅ Datos cargados correctamente.")
 else:
@@ -274,6 +277,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas por ISP.")
+
 
 
 
