@@ -182,6 +182,8 @@ def obtener_datos_paginados(url, headers, campo_programas):
                 break
 
             data = response.json()
+            st.write("🔎 Claves disponibles:", list(data.keys()))
+
             results = data.get("results", [])
             if not results:
                 break
@@ -350,4 +352,5 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas por ISP.")
+
 
