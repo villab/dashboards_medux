@@ -48,7 +48,7 @@ st.sidebar.header("⚙️ Parámetros de consulta")
 
 programas = st.sidebar.multiselect(
     "Selecciona los programas",
-    ["http-upload-burst-test", "http-down-burst-test", "ping-test","network"],
+    ["http-upload-burst-test", "http-down-burst-test", "ping-test","network","voice-out","cloud-download","cloud-upload"],
     default=["ping-test"]
 )
 
@@ -266,6 +266,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene columnas 'latitude' y 'longitude'.")
 else:
     st.info("👈 Consulta primero la API para visualizar el mapa.")
+
 
 
 
