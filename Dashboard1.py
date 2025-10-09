@@ -1,13 +1,10 @@
 # ===========================================================
-# ✅ Versión estable con soporte para "network" y tests/programs
+# Dashboard Medux API — versión estable
 # ===========================================================
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import requests
-import json
-from io import StringIO
 from datetime import datetime, timedelta, time
 import pytz
 from streamlit_autorefresh import st_autorefresh
@@ -32,6 +29,9 @@ elif token_input:
 else:
     st.warning("⚠️ Ingresa o sube un token válido para continuar.")
     st.stop()
+
+API_URL = "https://medux-ids.caseonit.com/api/results"
+headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
 # CSV de probes
 st.sidebar.markdown("---")
@@ -119,91 +119,86 @@ st.sidebar.write(f"Inicio local: {datetime.fromtimestamp(ts_start/1000, tz=zona_
 st.sidebar.write(f"Fin local: {datetime.fromtimestamp(ts_end/1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ===========================================================
-# 🧩 Función auxiliar para construir el body dinámicamente
+# 🔹 Función para procesar resultados
 # ===========================================================
-def construir_body(campo_programas: str):
-    return {
+def flatten_results(raw_json):
+    rows = []
+    if not raw_json or "results" not in raw_json:
+        st.warning("⚠️ No se encontró la clave 'results' en la respuesta.")
+        return pd.DataFrame()
+
+    for item in raw_json["results"]:
+        if not isinstance(item, dict):
+            continue
+        flat = item.copy()
+        # Definir 'program' correctamente
+        if "test" in item:
+            flat["program"] = item["test"]
+        elif "program" in item:
+            flat["program"] = item["program"]
+        else:
+            flat["program"] = "network"
+        rows.append(flat)
+
+    return pd.DataFrame(rows)
+
+# ===========================================================
+# 🔹 Función para consultar API con paginación
+# ===========================================================
+def consultar_api(programas_seleccionados):
+    all_results = []
+    pagina = 1
+    total_acumulado = 0
+
+    # Cuerpo inicial
+    body = {
+        "programs": programas_seleccionados,
         "tsStart": ts_start,
         "tsEnd": ts_end,
         "format": "raw",
-        campo_programas: programas,
         "probes": [str(p) for p in probes if pd.notna(p)],
+        "paginate": True,
+        "size": 10000
     }
 
-# ===========================================================
-# 🔹 Llamada a la API
-# ===========================================================
-url = "https://medux-ids.caseonit.com/api/results"
-headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    next_data = None
 
-@st.cache_data(ttl=1800)
-def obtener_datos(url, headers, body):
-    response = requests.post(url, headers=headers, json=body)
-    if response.status_code == 200:
-        return response.json()
+    with st.spinner("📡 Consultando API..."):
+        while True:
+            if next_data:
+                body["search_after"] = next_data
+            response = requests.post(API_URL, headers=headers, json=body)
+            if response.status_code != 200:
+                st.error(f"❌ Error API {response.status_code}: {response.text}")
+                break
+            data = response.json()
+            df_page = flatten_results(data)
+            all_results.append(df_page)
+            total_acumulado += len(df_page)
+            st.info(f"📥 Página {pagina} → {len(df_page):,} registros (total acumulado: {total_acumulado:,})")
+            next_data = data.get("next_pagination_data")
+            if not next_data:
+                break
+            pagina += 1
+
+    if all_results:
+        return pd.concat(all_results, ignore_index=True)
     else:
-        try:
-            st.error(f"❌ Error API {response.status_code}: {response.json()}")
-        except:
-            st.error(f"❌ Error API {response.status_code}: {response.text}")
-        st.text_area("🧾 Respuesta cruda de la API:", response.text, height=200)
-        return None
+        return pd.DataFrame()
 
 # ===========================================================
 # 🔹 Ejecución principal
 # ===========================================================
 if st.sidebar.button("🚀 Consultar API") or usar_real_time:
-    try:
-        body = construir_body("tests")
-        data = obtener_datos(url, headers, body)
-
-        # ✅ Si la API devuelve error con "tests", usar "programs"
-        if not data or "results" not in data:
-            st.warning("⚠️ Reintentando con campo 'programs'...")
-            body = construir_body("programs")
-            data = obtener_datos(url, headers, body)
-
-        if not data or "results" not in data:
-            st.error("⚠️ La respuesta no contiene 'results'.")
-            st.stop()
-
-        # ===============================================
-        # ✅ Procesar resultados con soporte a 'network'
-        # ===============================================
-        def flatten_results(raw_json, requested_programs):
-            rows = []
-            for item in raw_json.get("results", []):
-                if isinstance(item, dict):
-                    flat = item.copy()
-                    # Fallback inteligente del campo "program"
-                    flat["program"] = (
-                        item.get("test")
-                        or item.get("program")
-                        or item.get("taskName")
-                        or (requested_programs[0] if len(requested_programs) == 1 else "network")
-                    )
-                    rows.append(flat)
-
-            df_flat = pd.DataFrame(rows)
-            if not df_flat.empty:
-                df_flat["program"] = df_flat["program"].fillna("Desconocido")
-                df_flat.loc[df_flat["program"].str.strip() == "", "program"] = "Desconocido"
-            return df_flat
-
-        df = flatten_results(data, programas)
-
-        if df.empty:
-            st.warning("⚠️ No se recibieron datos válidos o 'results' está vacío.")
-            st.stop()
-
+    df = consultar_api(programas)
+    if df.empty:
+        st.error("❌ No se recibieron datos válidos de la API.")
+        st.stop()
+    else:
         st.session_state.df = df
-        st.success(f"✅ Datos cargados correctamente. {len(df):,} registros recibidos.")
+        st.success(f"✅ Datos cargados correctamente: {len(df):,} registros totales.")
         st.write("📊 Distribución por programa:")
         st.write(df["program"].value_counts())
-
-    except Exception as e:
-        st.exception(e)
-        st.error("❌ Ocurrió un error inesperado durante la consulta.")
 else:
     df = st.session_state.df if "df" in st.session_state else pd.DataFrame()
 
@@ -212,8 +207,8 @@ else:
 # ===========================================================
 if not df.empty:
     st.sidebar.header("📈 Visualización")
-    programa = st.sidebar.selectbox("Programa", sorted(df["program"].unique()))
-    subset = df[df["program"] == programa]
+    programa_sel = st.sidebar.selectbox("Programa", sorted(df["program"].unique()))
+    subset = df[df["program"] == programa_sel]
     columnas_numericas = subset.select_dtypes(include="number").columns.tolist()
     columnas_todas = subset.columns.tolist()
     eje_x = st.sidebar.selectbox("Eje X", columnas_todas, index=0)
@@ -221,11 +216,11 @@ if not df.empty:
     tipo = st.sidebar.selectbox("Tipo de gráfico", ["scatter", "line", "bar"])
 
     if tipo == "scatter":
-        fig = px.scatter(subset, x=eje_x, y=eje_y, title=f"{programa}: {eje_y} vs {eje_x}")
+        fig = px.scatter(subset, x=eje_x, y=eje_y, title=f"{programa_sel}: {eje_y} vs {eje_x}")
     elif tipo == "line":
-        fig = px.line(subset, x=eje_x, y=eje_y, title=f"{programa}: {eje_y} vs {eje_x}")
+        fig = px.line(subset, x=eje_x, y=eje_y, title=f"{programa_sel}: {eje_y} vs {eje_x}")
     else:
-        fig = px.bar(subset, x=eje_x, y=eje_y, title=f"{programa}: {eje_y} vs {eje_x}")
+        fig = px.bar(subset, x=eje_x, y=eje_y, title=f"{programa_sel}: {eje_y} vs {eje_x}")
 
     st.plotly_chart(fig, use_container_width=True)
     with st.expander("📄 Ver datos"):
@@ -238,66 +233,58 @@ else:
 # ===========================================================
 st.markdown("## 🗺️ Mapas por ISP")
 
-if "df" in st.session_state and not st.session_state.df.empty:
-    df_plot = st.session_state.df.copy()
+if not df.empty and all(col in df.columns for col in ["latitude", "longitude", "isp"]):
+    df_plot = df.copy()
+    df_plot["latitude"] = pd.to_numeric(df_plot["latitude"], errors="coerce")
+    df_plot["longitude"] = pd.to_numeric(df_plot["longitude"], errors="coerce")
+    df_plot = df_plot.dropna(subset=["latitude", "longitude", "isp"])
 
-    if all(col in df_plot.columns for col in ["latitude", "longitude", "isp"]):
-        df_plot["latitude"] = pd.to_numeric(df_plot["latitude"], errors="coerce")
-        df_plot["longitude"] = pd.to_numeric(df_plot["longitude"], errors="coerce")
-        df_plot = df_plot.dropna(subset=["latitude", "longitude", "isp"])
+    if not df_plot.empty:
+        isps = df_plot["isp"].unique().tolist()
+        colores = px.colors.qualitative.Bold
+        for i, isp in enumerate(isps):
+            df_isp = df_plot[df_plot["isp"] == isp]
+            if df_isp.empty:
+                continue
+            ultimo_punto = df_isp.iloc[-1]
+            centro_lat = ultimo_punto["latitude"]
+            centro_lon = ultimo_punto["longitude"]
 
-        if not df_plot.empty:
-            isps = df_plot["isp"].unique().tolist()
-            colores = px.colors.qualitative.Bold
+            lat_range = df_isp["latitude"].max() - df_isp["latitude"].min()
+            lon_range = df_isp["longitude"].max() - df_isp["longitude"].min()
+            if lat_range < 0.1 and lon_range < 0.1:
+                zoom_auto = 15
+            elif lat_range < 1 and lon_range < 1:
+                zoom_auto = 13
+            elif lat_range < 5 and lon_range < 5:
+                zoom_auto = 11
+            else:
+                zoom_auto = 9
 
-            for i, isp in enumerate(isps):
-                df_isp = df_plot[df_plot["isp"] == isp]
-                if df_isp.empty:
-                    continue
+            zoom_user = st.sidebar.slider(f"🔍 Zoom para {isp}", 3, 15, int(zoom_auto))
+            hover_cols = [c for c in ["latitude", "longitude", "city", "program", "subtechnology", "avgLatency"] if c in df_isp.columns]
 
-                ultimo_punto = df_isp.iloc[-1]
-                centro_lat = ultimo_punto["latitude"]
-                centro_lon = ultimo_punto["longitude"]
+            fig = px.scatter_mapbox(
+                df_isp,
+                lat="latitude",
+                lon="longitude",
+                color="program" if "program" in df_isp.columns else None,
+                hover_name="program" if "program" in df_isp.columns else None,
+                hover_data=hover_cols,
+                color_discrete_sequence=[colores[i % len(colores)]],
+                height=500,
+            )
+            fig.update_layout(
+                mapbox_style="carto-positron",
+                mapbox_center={"lat": centro_lat, "lon": centro_lon},
+                mapbox_zoom=zoom_user,
+                margin={"r": 0, "t": 0, "l": 0, "b": 0},
+            )
 
-                lat_range = df_isp["latitude"].max() - df_isp["latitude"].min()
-                lon_range = df_isp["longitude"].max() - df_isp["longitude"].min()
-
-                if lat_range < 0.1 and lon_range < 0.1:
-                    zoom_auto = 15
-                elif lat_range < 1 and lon_range < 1:
-                    zoom_auto = 13
-                elif lat_range < 5 and lon_range < 5:
-                    zoom_auto = 11
-                else:
-                    zoom_auto = 9
-
-                zoom_user = st.sidebar.slider(f"🔍 Zoom para {isp}", 3, 15, int(zoom_auto))
-                hover_cols = [c for c in ["latitude", "longitude", "city", "program", "subtechnology", "avgLatency"] if c in df_isp.columns]
-
-                fig = px.scatter_mapbox(
-                    df_isp,
-                    lat="latitude",
-                    lon="longitude",
-                    color="program" if "program" in df_isp.columns else None,
-                    hover_name="program" if "program" in df_isp.columns else None,
-                    hover_data=hover_cols,
-                    color_discrete_sequence=[colores[i % len(colores)]],
-                    height=500,
-                )
-
-                fig.update_layout(
-                    mapbox_style="carto-positron",
-                    mapbox_center={"lat": centro_lat, "lon": centro_lon},
-                    mapbox_zoom=zoom_user,
-                    margin={"r": 0, "t": 0, "l": 0, "b": 0},
-                )
-
-                st.subheader(f"🗺️ ISP: {isp}")
-                st.plotly_chart(fig, use_container_width=True)
-                st.caption(f"Última medición para {isp}: ({centro_lat:.4f}, {centro_lon:.4f}) | Zoom: {zoom_user}")
-        else:
-            st.warning("⚠️ No hay coordenadas válidas para mostrar en los mapas.")
+            st.subheader(f"🗺️ ISP: {isp}")
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption(f"Última medición para {isp}: ({centro_lat:.4f}, {centro_lon:.4f}) | Zoom: {zoom_user}")
     else:
-        st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
+        st.warning("⚠️ No hay coordenadas válidas para mostrar en los mapas.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas por ISP.")
