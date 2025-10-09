@@ -109,51 +109,61 @@ st.sidebar.write(f"Inicio local: {datetime.fromtimestamp(ts_start/1000, tz=zona_
 st.sidebar.write(f"Fin local: {datetime.fromtimestamp(ts_end/1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ===========================================================
-# 🔹 Llamada a la API
+# 🔹 Llamada a la API (con validación automática de campo)
 # ===========================================================
 url = "https://medux-ids.caseonit.com/api/results"
 headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
-body = {
-    "tsStart": ts_start,
-    "tsEnd": ts_end,
-    "format": "raw",
-    "tests": programas,  # ✅ Se cambió "programs" → "tests"
-    "probes": [str(p) for p in probes if pd.notna(p)],
-}
+def construir_body(use_field="programs"):
+    """Construye el body con la clave correcta (programs o tests)."""
+    return {
+        "tsStart": ts_start,
+        "tsEnd": ts_end,
+        "format": "raw",
+        use_field: programas,
+        "probes": [str(p) for p in probes if pd.notna(p)],
+    }
 
 @st.cache_data(ttl=1800)
 def obtener_datos(url, headers, body):
+    """Realiza la petición y devuelve JSON si es válida."""
     response = requests.post(url, headers=headers, json=body)
     if response.status_code == 200:
         return response.json()
     else:
-        st.error(f"❌ Error API: {response.status_code}")
-        return None
-
+        return {"error": response.status_code, "text": response.text}
 
 # ===========================================================
-# 🔹 Lógica de ejecución principal
+# 🔹 Ejecución principal
 # ===========================================================
 if "df" not in st.session_state:
     st.session_state.df = pd.DataFrame()
 
 if st.sidebar.button("🚀 Consultar API") or usar_real_time:
+    # Intentar primero con 'tests', si falla, reintentar con 'programs'
+    body = construir_body("tests")
     data = obtener_datos(url, headers, body)
-    if not data:
+
+    if "error" in data and data["error"] == 400:
+        st.warning("⚠️ El campo 'tests' no fue aceptado por la API, probando con 'programs'...")
+        body = construir_body("programs")
+        data = obtener_datos(url, headers, body)
+
+    # Manejo de error
+    if "error" in data:
+        st.error(f"❌ Error API: {data['error']}")
+        st.text(data.get("text", ""))
         st.stop()
 
     # ===============================================
-    # ✅ Nueva función flatten_results
+    # ✅ Flatten results
     # ===============================================
     def flatten_results(raw_json):
         rows = []
-        # Si la respuesta tiene directamente "results"
         if isinstance(raw_json, dict) and "results" in raw_json:
             for item in raw_json["results"]:
                 if isinstance(item, dict):
                     flat = item.copy()
-                    # ✅ Usa el campo correcto del API
                     flat["program"] = (
                         item.get("test") or
                         item.get("taskName") or
@@ -161,18 +171,15 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
                     )
                     rows.append(flat)
         else:
-            st.warning("⚠️ La respuesta no tiene el formato esperado (no contiene 'results').")
+            st.warning("⚠️ La respuesta no contiene 'results' válidos.")
 
         df_flat = pd.DataFrame(rows)
-
-        # ✅ Normaliza el campo program
         if "program" in df_flat.columns:
             df_flat["program"] = df_flat["program"].fillna("Desconocido")
             df_flat.loc[df_flat["program"].str.strip() == "", "program"] = "Desconocido"
 
         return df_flat
 
-    # Convertir respuesta a DataFrame
     df = flatten_results(data)
 
     if df.empty:
@@ -291,6 +298,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas por ISP.")
+
 
 
 
