@@ -127,76 +127,49 @@ body = {
 # ===========================================================
 @st.cache_data(ttl=1800)
 def obtener_datos_pag(url, headers, body):
-    all_results = {}
-    body_pag = body.copy()
-    body_pag["paginate"] = True
+    """
+    Descarga datos paginados desde la API de Medux con control automático.
+    - Combina todas las páginas.
+    - Se detiene limpiamente cuando no hay más resultados.
+    """
+
+    todos_los_resultados = {}
     pagina = 1
     total_registros = 0
 
-    progress_text = "📡 Consultando API Medux..."
-    my_bar = st.progress(0, text=progress_text)
-
     while True:
-        response = requests.post(url, headers=headers, json=body_pag)
+        st.info(f"📡 Descargando página {pagina}...")
+
+        response = requests.post(url, headers=headers, json=body)
         if response.status_code != 200:
-            st.error(f"❌ Error API: {response.status_code}")
-            return None
+            st.error(f"❌ Error API (página {pagina}): {response.status_code}")
+            break
 
         data = response.json()
-        if not data:
-            break
+        resultados = data.get("results", {})
 
-        # --- Detectar estructura de la respuesta ---
-        if "results" in data:
-            resultados = data["results"]
-        else:
-            resultados = {k: v for k, v in data.items() if k != "next_pagination_data"}
-
-        # --- Normalizar a diccionario ---
-        if isinstance(resultados, list):
-            resultados = {"default": resultados}
-
-        # --- Combinar resultados ---
+        # 🔹 Acumular resultados por programa
         for program, results in resultados.items():
-            if not isinstance(results, list):
-                continue
-            if program not in all_results:
-                all_results[program] = []
-            all_results[program].extend(results)
+            if program not in todos_los_resultados:
+                todos_los_resultados[program] = []
+            todos_los_resultados[program].extend(results)
             total_registros += len(results)
 
-        # --- Actualizar barra de progreso ---
-        my_bar.progress(
-            min(pagina * 5, 100),
-            text=f"📄 Página {pagina} descargada... ({total_registros:,} registros)"
-        )
+        st.success(f"📄 Página {pagina} descargada... ({total_registros:,} registros acumulados)")
 
-        # --- Verificar si hay más páginas ---
+        # 🔹 Revisar si hay más páginas
         next_data = data.get("next_pagination_data")
-        if not next_data:
-            break
-        
-        # 🚫 Si no hay paginación o es vacía, terminamos limpio
+
+        # 🚫 Si no hay siguiente página, se corta limpio
         if not next_data or not any(next_data.values()):
-            st.info(f"✅ No se requiere paginación. {total_registros:,} registros descargados en {pagina} página(s).")
-            break
-        
-        # --- Preparar siguiente página (manejo flexible de claves) ---
-        pit_value = next_data.get("pit") or next_data.get("pit_token") or next_data.get("pagination_token")
-        search_value = next_data.get("search_after") or next_data.get("next_search_after")
-
-        if not pit_value and not search_value:
-            st.warning(f"⚠️ No se encontraron claves válidas de paginación en la página {pagina}. Finalizando.")
+            st.info(f"✅ Descarga completada. Total: {total_registros:,} registros en {pagina} página(s).")
             break
 
-        body_pag["pit"] = pit_value
-        body_pag["search_after"] = search_value
+        # 🔹 Preparar el cuerpo para la siguiente página
+        body["pagination_data"] = next_data
         pagina += 1
 
-
-    my_bar.empty()
-    st.success(f"✅ Se descargaron {pagina} página(s) con un total de {total_registros:,} registros.")
-    return all_results
+    return todos_los_resultados
 
 
 
@@ -309,6 +282,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
 
 
 
