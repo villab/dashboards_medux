@@ -320,23 +320,34 @@ st.markdown("## 📈 Comparativa de métricas")
 if "df" in st.session_state and not st.session_state.df.empty:
     df_plot = st.session_state.df.copy()
 
-    # --- Detectar columnas numéricas ---
-    numeric_cols = df_plot.select_dtypes(include=["number"]).columns.tolist()
+    # --- Intentar convertir strings numéricos a float ---
+    for col in df_plot.columns:
+        if df_plot[col].dtype == "object":
+            try:
+                df_plot[col] = pd.to_numeric(df_plot[col])
+            except Exception:
+                pass  # Si no se puede convertir, se deja igual
 
-    # --- Verificar si hay columnas numéricas disponibles ---
-    if len(numeric_cols) >= 2:
+    # --- Detectar columnas numéricas y de texto ---
+    columnas_todas = df_plot.columns.tolist()
+    columnas_numericas = [
+        c for c in columnas_todas if pd.api.types.is_numeric_dtype(df_plot[c])
+    ]
+
+    # --- Verificar si hay columnas suficientes ---
+    if len(columnas_todas) >= 2:
         col1, col2, col3 = st.columns([1, 1, 2])
 
         with col1:
-            eje_x = st.selectbox("📏 Eje X", options=numeric_cols, index=0)
+            eje_x = st.selectbox("📏 Eje X", options=columnas_todas, index=0)
 
         with col2:
-            eje_y = st.selectbox("📐 Eje Y", options=numeric_cols, index=min(1, len(numeric_cols) - 1))
+            eje_y = st.selectbox("📐 Eje Y", options=columnas_numericas, index=min(1, len(columnas_numericas) - 1))
 
         with col3:
             color_var = st.selectbox(
                 "🎨 Agrupar por",
-                options=[c for c in df_plot.columns if c not in [eje_x, eje_y]],
+                options=[c for c in columnas_todas if c not in [eje_x, eje_y]],
                 index=df_plot.columns.get_loc("isp") if "isp" in df_plot.columns else 0
             )
 
@@ -346,7 +357,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
             x=eje_x,
             y=eje_y,
             color=color_var,
-            hover_data=["city", "provider", "subtechnology"] if "city" in df_plot.columns else None,
+            hover_data=[c for c in ["city", "provider", "subtechnology"] if c in df_plot.columns],
             color_discrete_sequence=px.colors.qualitative.Bold,
             labels={eje_x: eje_x.replace("_", " "), eje_y: eje_y.replace("_", " ")},
             title=f"Relación entre **{eje_x}** y **{eje_y}**",
@@ -365,11 +376,9 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.plotly_chart(fig_disp, use_container_width=True)
 
     else:
-        st.warning("⚠️ No hay suficientes columnas numéricas para generar la gráfica.")
+        st.warning("⚠️ No hay suficientes columnas para generar la gráfica.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
-
-
 
 
 
