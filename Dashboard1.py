@@ -109,7 +109,7 @@ st.sidebar.write(f"Inicio local: {datetime.fromtimestamp(ts_start/1000, tz=zona_
 st.sidebar.write(f"Fin local: {datetime.fromtimestamp(ts_end/1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ===========================================================
-# 🔹 Llamada a la API
+# 🔹 Llamada a la API (con paginación automática)
 # ===========================================================
 url = "https://medux-ids.caseonit.com/api/results"
 headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
@@ -121,72 +121,88 @@ body = {
     "probes": [str(p) for p in probes if pd.notna(p)],
 }
 
-@st.cache_data(ttl=1800)
-def obtener_datos(url, headers, body):
-    response = requests.post(url, headers=headers, json=body)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        st.error(f"❌ Error API: {response.status_code}")
-        return None
 
 # ===========================================================
-# 🔹 Lógica de ejecución principal
+# 🔹 Función para obtener datos con paginación
+# ===========================================================
+@st.cache_data(ttl=1800)
+def obtener_datos_pag(url, headers, body):
+    all_results = {}
+    body_pag = body.copy()
+    body_pag["paginate"] = True
+    pagina = 1
+
+    progress_text = "📡 Consultando API Medux..."
+    my_bar = st.progress(0, text=progress_text)
+
+    while True:
+        response = requests.post(url, headers=headers, json=body_pag)
+        if response.status_code != 200:
+            st.error(f"❌ Error API: {response.status_code}")
+            return None
+
+        data = response.json()
+        if not data:
+            break
+
+        # Combinar resultados
+        for program, results in data.get("results", {}).items():
+            if program not in all_results:
+                all_results[program] = []
+            all_results[program].extend(results)
+
+        # Mostrar avance en Streamlit
+        my_bar.progress(min(pagina * 5, 100), text=f"📄 Página {pagina} descargada...")
+
+        # Revisar si hay siguiente página
+        next_data = data.get("next_pagination_data")
+        if not next_data:
+            break
+
+        body_pag["pit"] = next_data.get("pit")
+        body_pag["search_after"] = next_data.get("search_after")
+        pagina += 1
+
+    my_bar.empty()
+    return all_results
+
+
+# ===========================================================
+# 🔹 Función para aplanar resultados en DataFrame
+# ===========================================================
+def flatten_results(raw_json):
+    rows = []
+    for program, results in raw_json.items():
+        if not isinstance(results, list) or len(results) == 0:
+            continue
+        for item in results:
+            flat = {"program": program}
+            if isinstance(item, dict):
+                flat.update(item)
+            rows.append(flat)
+    return pd.DataFrame(rows)
+
+
+# ===========================================================
+# 🔹 Lógica principal de ejecución
 # ===========================================================
 if "df" not in st.session_state:
     st.session_state.df = pd.DataFrame()
 
 if st.sidebar.button("🚀 Consultar API") or usar_real_time:
-    data = obtener_datos(url, headers, body)
+    data = obtener_datos_pag(url, headers, body)
     if not data:
         st.stop()
 
-    def flatten_results(raw_json):
-        rows = []
-        for program, results in raw_json.items():
-            if not isinstance(results, list) or len(results) == 0:
-                continue
-            for item in results:
-                flat = {"program": program}
-                if isinstance(item, dict):
-                    flat.update(item)
-                rows.append(flat)
-        return pd.DataFrame(rows)
-
     df = flatten_results(data)
     if df.empty:
-        st.warning("No se recibieron datos de la API.")
+        st.warning("⚠️ No se recibieron datos de la API.")
         st.stop()
+
     st.session_state.df = df
-    st.success("✅ Datos cargados correctamente.")
+    st.success(f"✅ Datos cargados correctamente ({len(df)} filas en total).")
 else:
     df = st.session_state.df
-
-# ===========================================================
-# 🔹 Interfaz de gráficos
-# ===========================================================
-if not df.empty:
-    st.sidebar.header("📈 Visualización")
-    programa = st.sidebar.selectbox("Programa", sorted(df["program"].unique()))
-    subset = df[df["program"] == programa]
-    columnas_numericas = subset.select_dtypes(include="number").columns.tolist()
-    columnas_todas = subset.columns.tolist()
-    eje_x = st.sidebar.selectbox("Eje X", columnas_todas, index=0)
-    eje_y = st.sidebar.selectbox("Eje Y", columnas_numericas, index=1 if len(columnas_numericas) > 1 else 0)
-    tipo = st.sidebar.selectbox("Tipo de gráfico", ["scatter", "line", "bar"])
-
-    if tipo == "scatter":
-        fig = px.scatter(subset, x=eje_x, y=eje_y, title=f"{programa}: {eje_y} vs {eje_x}")
-    elif tipo == "line":
-        fig = px.line(subset, x=eje_x, y=eje_y, title=f"{programa}: {eje_y} vs {eje_x}")
-    else:
-        fig = px.bar(subset, x=eje_x, y=eje_y, title=f"{programa}: {eje_y} vs {eje_x}")
-
-    st.plotly_chart(fig, use_container_width=True)
-    with st.expander("📄 Ver datos"):
-        st.dataframe(subset)
-else:
-    st.info("👈 Configura y presiona **Consultar API** o activa real-time para ver los resultados.")
 
 # ===========================================================
 # 🌍 Mapas de mediciones por ISP
@@ -260,3 +276,4 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
