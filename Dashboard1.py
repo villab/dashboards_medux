@@ -246,17 +246,19 @@ if "df" in st.session_state and not st.session_state.df.empty:
                 centro_lon = ultimo_punto["longitude"]
 
                 # Zoom automático basado en dispersión
-                lat_range = df_isp["latitude"].max() - df_isp["latitude"].min()
-                lon_range = df_isp["longitude"].max() - df_isp["longitude"].min()
-
+                # Calcular zoom promedio según dispersión global de todas las coordenadas
+                lat_range = df_plot["latitude"].max() - df_plot["latitude"].min()
+                lon_range = df_plot["longitude"].max() - df_plot["longitude"].min()
+                
                 if lat_range < 0.1 and lon_range < 0.1:
-                    zoom_auto = 15
+                    zoom_global = 15
                 elif lat_range < 1 and lon_range < 1:
-                    zoom_auto = 14
+                    zoom_global = 14
                 elif lat_range < 5 and lon_range < 5:
-                    zoom_auto = 12
+                    zoom_global = 12
                 else:
-                    zoom_auto = 10
+                    zoom_global = 10
+
 
                 zoom_user = st.sidebar.slider(f"Zoom para {isp}", 3, 15, int(zoom_auto))
 
@@ -293,6 +295,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
 
 
 
