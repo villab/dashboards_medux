@@ -220,7 +220,7 @@ else:
     df = st.session_state.df
 
 # ===========================================================
-# 🌍 Mapas de mediciones por ISP
+# 🌍 Mapas de mediciones por ISP (3 por fila)
 # ===========================================================
 st.markdown("## 🗺️ Mapas por ISP")
 
@@ -256,56 +256,59 @@ if "df" in st.session_state and not st.session_state.df.empty:
             zoom_global = st.sidebar.slider("🔍 Zoom general para mapas", 3, 15, int(zoom_default))
 
             # ============================
-            # 🗺️ Gráficos por ISP
+            # 🗺️ Mostrar en 3 columnas
             # ============================
-            for isp in df_plot["isp"].unique():
-                df_isp = df_plot[df_plot["isp"] == isp]
-                if df_isp.empty:
-                    continue
+            isps = df_plot["isp"].unique()
+            cols_per_row = 3  # ahora son tres por fila
 
-                ultimo_punto = df_isp.iloc[-1]
-                centro_lat = ultimo_punto["latitude"]
-                centro_lon = ultimo_punto["longitude"]
-                zoom_user = zoom_global  # usar el mismo zoom para todos
+            for i in range(0, len(isps), cols_per_row):
+                cols = st.columns(cols_per_row)
+                for j, col in enumerate(cols):
+                    if i + j >= len(isps):
+                        break
+                    isp = isps[i + j]
+                    df_isp = df_plot[df_plot["isp"] == isp]
+                    if df_isp.empty:
+                        continue
 
-                hover_cols = [c for c in ["latitude", "longitude", "city", "provider",
-                                          "subtechnology", "avgLatency", "program"]
-                              if c in df_isp.columns]
+                    ultimo_punto = df_isp.iloc[-1]
+                    centro_lat = ultimo_punto["latitude"]
+                    centro_lon = ultimo_punto["longitude"]
+                    hover_cols = [c for c in ["latitude", "longitude", "city", "provider",
+                                              "subtechnology", "avgLatency", "program"]
+                                  if c in df_isp.columns]
 
-                fig = px.scatter_map(
-                    df_isp,
-                    lat="latitude",
-                    lon="longitude",
-                    color="isp",
-                    hover_name="isp",
-                    hover_data=hover_cols,
-                    color_discrete_sequence=px.colors.qualitative.Bold,
-                    height=500,
-                    labels={"program": "Tipo de prueba"},
-                )
+                    fig = px.scatter_map(
+                        df_isp,
+                        lat="latitude",
+                        lon="longitude",
+                        color="isp",
+                        hover_name="isp",
+                        hover_data=hover_cols,
+                        color_discrete_sequence=px.colors.qualitative.Bold,
+                        height=320,  # más compacto
+                        labels={"program": "Tipo de prueba"},
+                    )
 
-                fig.update_layout(
-                    map={
-                        "style": "carto-positron",
-                        "center": {"lat": centro_lat, "lon": centro_lon},
-                        "zoom": zoom_user,
-                    },
-                    margin={"r": 0, "t": 0, "l": 0, "b": 0},
-                    legend_title_text="Programas Medux",
-                )
+                    fig.update_layout(
+                        map={
+                            "style": "carto-positron",
+                            "center": {"lat": centro_lat, "lon": centro_lon},
+                            "zoom": zoom_global,
+                        },
+                        margin={"r": 0, "t": 0, "l": 0, "b": 0},
+                        showlegend=False,  # ✅ oculta leyenda
+                    )
 
-                st.subheader(f"ISP: {isp}")
-                st.plotly_chart(fig, use_container_width=True)
-                st.caption(f"Última medición ISP {isp}: ({centro_lat:.4f}, {centro_lon:.4f}) | Zoom: {zoom_user}")
-
+                    with col:
+                        st.markdown(f"**{isp}**", unsafe_allow_html=True)
+                        st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("⚠️ No hay coordenadas válidas para mostrar.")
     else:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
-
-
 
 
 
