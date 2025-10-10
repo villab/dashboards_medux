@@ -176,10 +176,18 @@ def obtener_datos_pag(url, headers, body):
         if not next_data:
             break
 
-        # --- Preparar siguiente página ---
-        body_pag["pit"] = next_data.get("pit")
-        body_pag["search_after"] = next_data.get("search_after")
+        # --- Preparar siguiente página (manejo flexible de claves) ---
+        pit_value = next_data.get("pit") or next_data.get("pit_token") or next_data.get("pagination_token")
+        search_value = next_data.get("search_after") or next_data.get("next_search_after")
+
+        if not pit_value and not search_value:
+            st.warning(f"⚠️ No se encontraron claves válidas de paginación en la página {pagina}. Finalizando.")
+            break
+
+        body_pag["pit"] = pit_value
+        body_pag["search_after"] = search_value
         pagina += 1
+
 
     my_bar.empty()
     st.success(f"✅ Se descargaron {pagina} página(s) con un total de {total_registros:,} registros.")
@@ -296,6 +304,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
 
 
 
