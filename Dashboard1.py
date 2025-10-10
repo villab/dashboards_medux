@@ -288,11 +288,12 @@ if "df" in st.session_state and not st.session_state.df.empty:
                 st.plotly_chart(fig, use_container_width=True)
                 st.caption(f"Última medición ISP {isp}: ({centro_lat:.4f}, {centro_lon:.4f}) | Zoom: {zoom_user}")
 
-                st.warning("⚠️ No hay coordenadas válidas para mostrar.")
+                
     else:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
 
 
 
