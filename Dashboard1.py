@@ -227,75 +227,83 @@ st.markdown("## 🗺️ Mapas por ISP")
 if "df" in st.session_state and not st.session_state.df.empty:
     df_plot = st.session_state.df.copy()
 
-    # Verificar columnas de coordenadas y 'isp'
+    # Verificar columnas necesarias
     if all(col in df_plot.columns for col in ["latitude", "longitude", "isp"]):
         df_plot["latitude"] = pd.to_numeric(df_plot["latitude"], errors="coerce")
         df_plot["longitude"] = pd.to_numeric(df_plot["longitude"], errors="coerce")
         df_plot = df_plot.dropna(subset=["latitude", "longitude", "isp"])
 
         if not df_plot.empty:
+            # ============================
+            # 🔍 Zoom global consistente
+            # ============================
+            lat_range_global = df_plot["latitude"].max() - df_plot["latitude"].min()
+            lon_range_global = df_plot["longitude"].max() - df_plot["longitude"].min()
+
+            if pd.isna(lat_range_global) or pd.isna(lon_range_global):
+                zoom_default = 12
+            elif lat_range_global == 0 and lon_range_global == 0:
+                zoom_default = 15
+            elif lat_range_global < 0.1 and lon_range_global < 0.1:
+                zoom_default = 15
+            elif lat_range_global < 1 and lon_range_global < 1:
+                zoom_default = 14
+            elif lat_range_global < 5 and lon_range_global < 5:
+                zoom_default = 12
+            else:
+                zoom_default = 10
+
+            zoom_global = st.sidebar.slider("🔍 Zoom general para mapas", 3, 15, int(zoom_default))
+
+            # ============================
+            # 🗺️ Gráficos por ISP
+            # ============================
             for isp in df_plot["isp"].unique():
                 df_isp = df_plot[df_plot["isp"] == isp]
-
                 if df_isp.empty:
                     continue
 
-                # Centrar en la última medición del ISP
                 ultimo_punto = df_isp.iloc[-1]
                 centro_lat = ultimo_punto["latitude"]
                 centro_lon = ultimo_punto["longitude"]
+                zoom_user = zoom_global  # usar el mismo zoom para todos
 
-                # Zoom automático basado en dispersión
-                # Calcular zoom promedio según dispersión global de todas las coordenadas
-                lat_range = df_plot["latitude"].max() - df_plot["latitude"].min()
-                lon_range = df_plot["longitude"].max() - df_plot["longitude"].min()
-                
-                if lat_range < 0.1 and lon_range < 0.1:
-                    zoom_global = 15
-                elif lat_range < 1 and lon_range < 1:
-                    zoom_global = 14
-                elif lat_range < 5 and lon_range < 5:
-                    zoom_global = 12
-                else:
-                    zoom_global = 10
-
-
-                zoom_user = st.sidebar.slider(f"Zoom para {isp}", 3, 15, int(zoom_auto))
-
-                hover_cols = [c for c in ["latitude", "longitude", "city", "provider", "subtechnology", "avgLatency", "program"] if c in df_isp.columns]
+                hover_cols = [c for c in ["latitude", "longitude", "city", "provider",
+                                          "subtechnology", "avgLatency", "program"]
+                              if c in df_isp.columns]
 
                 fig = px.scatter_map(
                     df_isp,
                     lat="latitude",
                     lon="longitude",
-                    color="isp",  # puedes cambiar por 'subtechnology' si quieres
+                    color="isp",
                     hover_name="isp",
                     hover_data=hover_cols,
                     color_discrete_sequence=px.colors.qualitative.Bold,
                     height=500,
                     labels={"program": "Tipo de prueba"},
                 )
-                
+
                 fig.update_layout(
                     map={
-                        "style": "carto-positron",  # equivalente a mapbox_style
+                        "style": "carto-positron",
                         "center": {"lat": centro_lat, "lon": centro_lon},
                         "zoom": zoom_user,
                     },
                     margin={"r": 0, "t": 0, "l": 0, "b": 0},
                     legend_title_text="Programas Medux",
                 )
-                
+
                 st.subheader(f"ISP: {isp}")
                 st.plotly_chart(fig, use_container_width=True)
                 st.caption(f"Última medición ISP {isp}: ({centro_lat:.4f}, {centro_lon:.4f}) | Zoom: {zoom_user}")
 
-                
+        else:
+            st.warning("⚠️ No hay coordenadas válidas para mostrar.")
     else:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
-
 
 
 
