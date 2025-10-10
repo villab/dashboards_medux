@@ -262,7 +262,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
 
                 hover_cols = [c for c in ["latitude", "longitude", "city", "provider", "subtechnology", "avgLatency", "program"] if c in df_isp.columns]
 
-                fig = px.scatter_mapbox(
+                fig = px.scatter_map(
                     df_isp,
                     lat="latitude",
                     lon="longitude",
@@ -291,6 +291,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
 
 
 
