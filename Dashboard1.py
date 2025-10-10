@@ -273,24 +273,27 @@ if "df" in st.session_state and not st.session_state.df.empty:
                     height=500,
                     labels={"program": "Tipo de prueba"},
                 )
-
+                
                 fig.update_layout(
-                    mapbox_style="carto-positron",
-                    mapbox_center={"lat": centro_lat, "lon": centro_lon},
-                    mapbox_zoom=zoom_user,
+                    map={
+                        "style": "carto-positron",  # equivalente a mapbox_style
+                        "center": {"lat": centro_lat, "lon": centro_lon},
+                        "zoom": zoom_user,
+                    },
                     margin={"r": 0, "t": 0, "l": 0, "b": 0},
                     legend_title_text="Programas Medux",
                 )
-
+                
                 st.subheader(f"ISP: {isp}")
                 st.plotly_chart(fig, use_container_width=True)
                 st.caption(f"Última medición ISP {isp}: ({centro_lat:.4f}, {centro_lon:.4f}) | Zoom: {zoom_user}")
-        else:
+
             st.warning("⚠️ No hay coordenadas válidas para mostrar.")
     else:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
 
 
 
