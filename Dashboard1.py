@@ -312,6 +312,64 @@ else:
 
 
 
+# ===========================================================
+# 📊 Gráfica de dispersión interactiva
+# ===========================================================
+st.markdown("## 📈 Comparativa de métricas")
+
+if "df" in st.session_state and not st.session_state.df.empty:
+    df_plot = st.session_state.df.copy()
+
+    # --- Detectar columnas numéricas ---
+    numeric_cols = df_plot.select_dtypes(include=["number"]).columns.tolist()
+
+    # --- Verificar si hay columnas numéricas disponibles ---
+    if len(numeric_cols) >= 2:
+        col1, col2, col3 = st.columns([1, 1, 2])
+
+        with col1:
+            eje_x = st.selectbox("📏 Eje X", options=numeric_cols, index=0)
+
+        with col2:
+            eje_y = st.selectbox("📐 Eje Y", options=numeric_cols, index=min(1, len(numeric_cols) - 1))
+
+        with col3:
+            color_var = st.selectbox(
+                "🎨 Agrupar por",
+                options=[c for c in df_plot.columns if c not in [eje_x, eje_y]],
+                index=df_plot.columns.get_loc("isp") if "isp" in df_plot.columns else 0
+            )
+
+        # --- Crear la gráfica ---
+        fig_disp = px.scatter(
+            df_plot,
+            x=eje_x,
+            y=eje_y,
+            color=color_var,
+            hover_data=["city", "provider", "subtechnology"] if "city" in df_plot.columns else None,
+            color_discrete_sequence=px.colors.qualitative.Bold,
+            labels={eje_x: eje_x.replace("_", " "), eje_y: eje_y.replace("_", " ")},
+            title=f"Relación entre **{eje_x}** y **{eje_y}**",
+            height=500
+        )
+
+        # --- Ajustes visuales ---
+        fig_disp.update_traces(marker=dict(size=8, opacity=0.8, line=dict(width=0.5, color="white")))
+        fig_disp.update_layout(
+            legend_title_text=color_var,
+            margin=dict(l=0, r=0, t=50, b=0),
+            hovermode="closest",
+            template="plotly_white",
+        )
+
+        st.plotly_chart(fig_disp, use_container_width=True)
+
+    else:
+        st.warning("⚠️ No hay suficientes columnas numéricas para generar la gráfica.")
+else:
+    st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
+
 
 
 
