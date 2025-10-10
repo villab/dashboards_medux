@@ -175,7 +175,12 @@ def obtener_datos_pag(url, headers, body):
         next_data = data.get("next_pagination_data")
         if not next_data:
             break
-
+        
+        # 🚫 Si no hay paginación o es vacía, terminamos limpio
+        if not next_data or not any(next_data.values()):
+            st.info(f"✅ No se requiere paginación. {total_registros:,} registros descargados en {pagina} página(s).")
+            break
+        
         # --- Preparar siguiente página (manejo flexible de claves) ---
         pit_value = next_data.get("pit") or next_data.get("pit_token") or next_data.get("pagination_token")
         search_value = next_data.get("search_after") or next_data.get("next_search_after")
@@ -304,6 +309,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
 
 
 
