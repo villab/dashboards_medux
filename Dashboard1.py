@@ -276,7 +276,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
                 
                 fig.update_layout(
                     map={
-                        "style": "carto-positron",  # equivalente a mapbox_style
+                        "style": "open-street-map",  # equivalente a mapbox_style
                         "center": {"lat": centro_lat, "lon": centro_lon},
                         "zoom": zoom_user,
                     },
@@ -293,6 +293,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
 
 
 
