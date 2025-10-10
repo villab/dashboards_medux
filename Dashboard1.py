@@ -131,6 +131,7 @@ def obtener_datos_pag(url, headers, body):
     body_pag = body.copy()
     body_pag["paginate"] = True
     pagina = 1
+    total_registros = 0
 
     progress_text = "📡 Consultando API Medux..."
     my_bar = st.progress(0, text=progress_text)
@@ -145,25 +146,36 @@ def obtener_datos_pag(url, headers, body):
         if not data:
             break
 
+        # --- Detectar estructura de la respuesta ---
+        if "results" in data:
+            resultados = data["results"]
+        else:
+            resultados = {k: v for k, v in data.items() if k != "next_pagination_data"}
+
         # Combinar resultados
-        for program, results in data.get("results", {}).items():
+        for program, results in resultados.items():
             if program not in all_results:
                 all_results[program] = []
             all_results[program].extend(results)
+            total_registros += len(results)
 
-        # Mostrar avance en Streamlit
-        my_bar.progress(min(pagina * 5, 100), text=f"📄 Página {pagina} descargada...")
+        # Actualizar barra de progreso
+        my_bar.progress(min(pagina * 5, 100), text=f"📄 Página {pagina} descargada... ({total_registros:,} registros)")
 
-        # Revisar si hay siguiente página
+        # Verificar si hay más páginas
         next_data = data.get("next_pagination_data")
         if not next_data:
             break
 
+        # Preparar siguiente página
         body_pag["pit"] = next_data.get("pit")
         body_pag["search_after"] = next_data.get("search_after")
         pagina += 1
 
     my_bar.empty()
+
+    # Mostrar resumen en Streamlit
+    st.success(f"✅ Se descargaron {pagina} página(s) con un total de {total_registros:,} registros.")
     return all_results
 
 
@@ -276,4 +288,5 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
 
