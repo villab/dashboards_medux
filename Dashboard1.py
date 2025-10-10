@@ -128,11 +128,9 @@ body = {
 @st.cache_data(ttl=1800)
 def obtener_datos_pag(url, headers, body):
     """
-    Descarga datos paginados desde la API de Medux con control automático.
-    - Combina todas las páginas.
-    - Se detiene limpiamente cuando no hay más resultados.
+    Descarga datos paginados desde la API de Medux con manejo flexible de formatos.
+    Compatible con 'results' tipo dict o list.
     """
-
     todos_los_resultados = {}
     pagina = 1
     total_registros = 0
@@ -148,29 +146,40 @@ def obtener_datos_pag(url, headers, body):
         data = response.json()
         resultados = data.get("results", {})
 
-        # 🔹 Acumular resultados por programa
-        for program, results in resultados.items():
-            if program not in todos_los_resultados:
-                todos_los_resultados[program] = []
-            todos_los_resultados[program].extend(results)
-            total_registros += len(results)
+        # 🔹 Caso 1: results es un diccionario {programa: [registros]}
+        if isinstance(resultados, dict):
+            for program, results in resultados.items():
+                if program not in todos_los_resultados:
+                    todos_los_resultados[program] = []
+                todos_los_resultados[program].extend(results)
+                total_registros += len(results)
+
+        # 🔹 Caso 2: results es una lista directa
+        elif isinstance(resultados, list):
+            if "general" not in todos_los_resultados:
+                todos_los_resultados["general"] = []
+            todos_los_resultados["general"].extend(resultados)
+            total_registros += len(resultados)
+
+        else:
+            st.warning(f"⚠️ Formato de 'results' desconocido en página {pagina}")
+            break
 
         st.success(f"📄 Página {pagina} descargada... ({total_registros:,} registros acumulados)")
 
         # 🔹 Revisar si hay más páginas
         next_data = data.get("next_pagination_data")
 
-        # 🚫 Si no hay siguiente página, se corta limpio
+        # 🚫 Si no hay siguiente página, terminamos
         if not next_data or not any(next_data.values()):
             st.info(f"✅ Descarga completada. Total: {total_registros:,} registros en {pagina} página(s).")
             break
 
-        # 🔹 Preparar el cuerpo para la siguiente página
+        # 🔹 Preparar la siguiente llamada
         body["pagination_data"] = next_data
         pagina += 1
 
     return todos_los_resultados
-
 
 
 # ===========================================================
@@ -282,6 +291,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ El dataset no contiene 'latitude', 'longitude' o 'isp'.")
 else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
+
 
 
 
