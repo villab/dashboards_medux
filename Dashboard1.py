@@ -229,7 +229,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
     df_estado = st.session_state.df.copy()
     col_probe = next((c for c in ["probe", "probe_id", "probeId", "probes_id"] if c in df_estado.columns), None)
     col_isp = next((c for c in ["isp", "provider", "operator"] if c in df_estado.columns), None)
-    col_time = next((c for c in ["timestamp", "ts", "datetime", "createdAt"] if c in df_estado.columns), None)
+    col_time = next((c for c in ["dateStart", "ts", "datetime", "createdAt"] if c in df_estado.columns), None)
 
     if col_probe and col_time:
         # Convertir timestamp a datetime si es necesario
@@ -473,6 +473,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ No se encontró ninguna columna de sonda ('probe', 'probe_id', 'probeId' o 'probes_id').")
 else:
     st.info("👈 Consulta primero la API para mostrar las tablas por sonda.")
+
 
 
 
