@@ -392,21 +392,36 @@ st.markdown("## 📋 Resultados por Sonda")
 if "df" in st.session_state and not st.session_state.df.empty:
     df_tablas = st.session_state.df.copy()
     col_probe = next((c for c in ["probe", "probe_id", "probeId", "probes_id"] if c in df_tablas.columns), None)
+    col_isp = next((c for c in ["isp", "provider", "operator"] if c in df_tablas.columns), None)
     col_time = next((c for c in ["timestamp", "ts", "datetime", "createdAt"] if c in df_tablas.columns), None)
 
     if col_probe:
         for s in sorted(df_tablas[col_probe].dropna().unique()):
-            st.subheader(f"Sonda {s}")
             df_sonda = df_tablas[df_tablas[col_probe] == s].copy()
+
+            # Determinar el ISP asociado (si hay más de uno, mostrar "Varios")
+            isp_values = df_sonda[col_isp].dropna().unique().tolist() if col_isp else []
+            isp_label = ", ".join(sorted(isp_values)) if len(isp_values) == 1 else (
+                "Varios" if len(isp_values) > 1 else "Desconocido"
+            )
+
+            # Título con ISP y sonda
+            st.subheader(f"🔹 Sonda {s} — ISP: {isp_label}")
+
+            # Ordenar por tiempo descendente (más reciente arriba)
             if col_time:
                 df_sonda[col_time] = pd.to_numeric(df_sonda[col_time], errors="coerce")
                 df_sonda = df_sonda.sort_values(by=col_time, ascending=False, na_position="last")
-            st.dataframe(df_sonda.head(20), use_container_width=True)  # puedes cambiar el .head(20)
+
+            # Mostrar tabla
+            st.dataframe(df_sonda.head(20), use_container_width=True)
+            st.caption(f"{len(df_sonda)} registros — del más reciente al más antiguo.")
             st.markdown("<br>", unsafe_allow_html=True)
     else:
         st.warning("⚠️ No se encontró ninguna columna de sonda ('probe', 'probe_id', 'probeId' o 'probes_id').")
 else:
     st.info("👈 Consulta primero la API para mostrar las tablas por sonda.")
+
 
 
 
