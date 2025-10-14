@@ -84,28 +84,29 @@ st.session_state["fecha_fin"] = fecha_fin
 st.session_state["hora_fin"] = hora_fin
 
 # ===========================================================
-# 🔄 Real-time y refresco automático (usa rango superior)
+# 🔄 Real-time y refresco automático (últimas 6h dinámicas)
 # ===========================================================
 from streamlit_autorefresh import st_autorefresh
 
 st.sidebar.markdown("---")
 st.sidebar.header("⏱️ Actualización en tiempo real")
 
-refresh_seconds = 30  # frecuencia de actualización (30 s)
-st_autorefresh(interval=refresh_seconds * 1000, key="real_time_refresh")
-
+refresh_seconds = 30  # frecuencia de actualización
 usar_real_time = st.sidebar.checkbox("Activar actualización automática", value=True)
+
+# Forzar refresco visual
+st_autorefresh(interval=refresh_seconds * 1000, key="real_time_refresh")
 
 zona_local = pytz.timezone("America/Bogota")
 ahora_local = datetime.now(zona_local)
 
 if usar_real_time:
-    # 🔁 Últimas 6 horas automáticas
-    ts_end = int(ahora_local.astimezone(pytz.utc).timestamp() * 1000)
-    ts_start = int((ahora_local - timedelta(hours=6)).astimezone(pytz.utc).timestamp() * 1000)
-    st.sidebar.caption(f"🔁 Modo realtime activo → Últimas 6 h (actualiza cada {refresh_seconds}s)")
+    # 🔁 Últimas 6 horas dinámicas (se recalcula en cada refresco)
+    ts_end = int(datetime.now(pytz.utc).timestamp() * 1000)
+    ts_start = int((datetime.now(pytz.utc) - timedelta(hours=6)).timestamp() * 1000)
+    st.sidebar.caption(f"🔁 Modo realtime activo → Últimas 6h (actualiza cada {refresh_seconds}s)")
 else:
-    # 🧭 Usa el rango definido en la parte superior del panel lateral
+    # 🧭 Usa el rango definido manualmente
     dt_inicio_local = zona_local.localize(datetime.combine(fecha_inicio, hora_inicio))
     dt_fin_local = zona_local.localize(datetime.combine(fecha_fin, hora_fin))
 
@@ -117,13 +118,34 @@ else:
     ts_end = int(dt_fin_local.astimezone(pytz.utc).timestamp() * 1000)
     st.sidebar.caption("📅 Rango de tiempo definido manualmente")
 
-# Mostrar resumen de rango activo
+# Mostrar rango activo
 st.sidebar.markdown("### 🕒 Rango activo")
 inicio_local_str = datetime.fromtimestamp(ts_start / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
 fin_local_str = datetime.fromtimestamp(ts_end / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
 st.sidebar.write(f"Inicio local: {inicio_local_str}")
 st.sidebar.write(f"Fin local: {fin_local_str}")
 
+# ===========================================================
+# 📡 Consulta API (sin cache en modo realtime)
+# ===========================================================
+def obtener_datos_pag_no_cache(url, headers, body):
+    """Versión sin cache para realtime"""
+    try:
+        resp = requests.post(url, headers=headers, json=body)
+        if resp.status_code == 200:
+            return resp.json()
+        else:
+            st.warning(f"⚠️ Error API: {resp.status_code}")
+            return None
+    except Exception as e:
+        st.error(f"❌ Error consultando API: {e}")
+        return None
+
+# --- Determinar qué función usar ---
+if usar_real_time:
+    resultados = obtener_datos_pag_no_cache(url, headers, {"start": ts_start, "end": ts_end})
+else:
+    resultados = obtener_datos_pag(url, headers, {"start": ts_start, "end": ts_end})  # la versión cacheada
 
 
 # ===========================================================
@@ -446,6 +468,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ No hay suficientes columnas para generar la gráfica.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
