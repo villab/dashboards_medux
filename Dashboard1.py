@@ -120,11 +120,12 @@ body = {
 }
 
 # ===========================================================
-# 🔹 FUNCIONES API (actualizadas)
+# 🔹 FUNCIONES DE CONSULTA Y NORMALIZACIÓN API
 # ===========================================================
 
 @st.cache_data(ttl=1800)
 def obtener_datos_pag(url, headers, body):
+    """Consulta la API paginada y almacena todos los resultados."""
     todos_los_resultados = {}
     pagina = 1
     total = 0
@@ -132,19 +133,20 @@ def obtener_datos_pag(url, headers, body):
     while True:
         st.info(f"📡 Descargando página {pagina}...")
         r = requests.post(url, headers=headers, json=body)
+
         if r.status_code != 200:
             st.error(f"❌ Error API: {r.status_code}")
             break
 
         data = r.json()
-        results = data.get("results", {})
+        results = data.get("results")
 
-        # Caso 1: lista directa (como network)
+        # 🔹 Caso 1: "results" es lista (p. ej. network)
         if isinstance(results, list):
             todos_los_resultados.setdefault("network", []).extend(results)
             total += len(results)
 
-        # Caso 2: diccionario de programas
+        # 🔹 Caso 2: "results" es dict (p. ej. ping-test, ftp-upload)
         elif isinstance(results, dict):
             for prog, res in results.items():
                 if isinstance(res, list):
@@ -154,6 +156,7 @@ def obtener_datos_pag(url, headers, body):
         next_data = data.get("next_pagination_data")
         if not next_data:
             break
+
         body["pagination_data"] = next_data
         pagina += 1
 
@@ -162,6 +165,7 @@ def obtener_datos_pag(url, headers, body):
 
 
 def obtener_datos_pag_no_cache(url, headers, body):
+    """Consulta la API sin caché (modo tiempo real)."""
     try:
         r = requests.post(url, headers=headers, json=body)
         if r.status_code == 200:
@@ -174,62 +178,67 @@ def obtener_datos_pag_no_cache(url, headers, body):
 
 
 def flatten_results(raw_json):
+    """Normaliza cualquier respuesta de la API (lista o dict) a un DataFrame plano."""
     filas = []
 
-    # Normaliza estructura: puede venir en distintas formas
-    results = raw_json.get("results", raw_json) if isinstance(raw_json, dict) else raw_json
+    if isinstance(raw_json, dict):
+        results = raw_json.get("results", raw_json)
+    else:
+        results = raw_json
 
-    # Caso 1: results = lista (como network)
+    # 🔹 Caso 1: lista directa (network)
     if isinstance(results, list):
         for item in results:
             if isinstance(item, dict):
                 item["program"] = "network"
                 filas.append(item)
 
-    # Caso 2: results = dict (ping-test, voice-out, etc.)
+    # 🔹 Caso 2: dict con listas (otros programas)
     elif isinstance(results, dict):
-        for prog, registros in results.items():
-            if isinstance(registros, list):
-                for item in registros:
+        for prog, lista in results.items():
+            if isinstance(lista, list):
+                for item in lista:
                     if isinstance(item, dict):
                         row = {"program": prog}
                         row.update(item)
                         filas.append(row)
 
-    else:
-        st.warning("⚠️ Formato inesperado en flatten_results().")
+    df = pd.DataFrame(filas)
+    return df
 
-    return pd.DataFrame(filas)
 
 # ===========================================================
-# 🚀 CONSULTAR API
+# 🚀 CONSULTAR API Y ACTUALIZAR DATOS
 # ===========================================================
+
 if "df" not in st.session_state:
     st.session_state.df = pd.DataFrame()
 
 if st.sidebar.button("🚀 Consultar API") or usar_real_time:
-    raw = obtener_datos_pag_no_cache(url, headers, body) if usar_real_time else obtener_datos_pag(url, headers, body)
+    # 🔹 Obtener datos según modo
+    if usar_real_time:
+        raw = obtener_datos_pag_no_cache(url, headers, body)
+    else:
+        raw = obtener_datos_pag(url, headers, body)
+
     if not raw:
         st.warning("⚠️ No se recibieron datos de la API.")
         st.stop()
 
-    if isinstance(raw, dict):
-        data = raw.get("results", raw)
-    elif isinstance(raw, list):
-        data = {"resultados": raw}
-    else:
-        st.error("❌ Formato inesperado de respuesta de la API.")
-        st.stop()
+    # 🔹 Convertir a DataFrame plano
+    df = flatten_results(raw)
 
-    df = flatten_results(data)
     if df.empty:
-        st.warning("⚠️ No se recibieron datos válidos.")
+        st.warning("⚠️ No se recibieron datos.")
         st.stop()
 
+    # 🔹 Guardar en sesión
     st.session_state.df = df
     st.success(f"✅ Datos cargados correctamente ({len(df)} filas).")
+
 else:
     df = st.session_state.df
+
 
 # ===========================================================
 # 📊 TABLA RESUMEN DE ESTADO DE SONDA (ON/OFF)
@@ -417,5 +426,6 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
