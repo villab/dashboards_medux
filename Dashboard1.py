@@ -186,11 +186,20 @@ if "df" not in st.session_state:
     st.session_state.df = pd.DataFrame()
 
 if st.sidebar.button("🚀 Consultar API") or usar_real_time:
-    data = obtener_datos_pag_no_cache(url, headers, body) if usar_real_time else obtener_datos_pag(url, headers, body)
+    if usar_real_time:
+        raw = obtener_datos_pag_no_cache(url, headers, body)
+        if not raw or "results" not in raw:
+            st.warning("⚠️ No se recibieron datos válidos del modo realtime.")
+            st.stop()
+        data = raw["results"]  # ✅ Igualar estructura al modo normal
+    else:
+        data = obtener_datos_pag(url, headers, body)
+
     if not data:
         st.stop()
 
     df = flatten_results(data)
+
     if df.empty:
         st.warning("⚠️ No se recibieron datos.")
         st.stop()
@@ -332,3 +341,4 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
