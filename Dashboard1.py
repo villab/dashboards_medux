@@ -229,43 +229,39 @@ st.markdown("## 📋 Resultados por Sonda")
 if "df" in st.session_state and not st.session_state.df.empty:
     df_tablas = st.session_state.df.copy()
 
-    # Identificar columnas
+    # Identificar columnas relevantes
     col_probe = next((c for c in ["probe", "probe_id", "probeId", "probes_id"] if c in df_tablas.columns), None)
     col_time = next((c for c in ["dateStart", "timestamp", "ts", "datetime", "createdAt"] if c in df_tablas.columns), None)
     col_isp = next((c for c in ["isp", "ISP", "provider"] if c in df_tablas.columns), None)
 
     if col_probe and col_time:
-        # Convertir dateStart o timestamp a datetime
-        df_tablas[col_time] = pd.to_numeric(df_tablas[col_time], errors="coerce")
-        # Intentar interpretar dateStart como ISO si no es numérico
-        if df_tablas[col_time].isna().all() and "dateStart" in df_tablas.columns:
-            try:
-                df_tablas["dateStart_dt"] = pd.to_datetime(df_tablas["dateStart"], errors="coerce", utc=True)
-                col_time = "dateStart_dt"
-            except Exception:
-                pass
-        else:
-            df_tablas["datetime_local"] = pd.to_datetime(df_tablas[col_time], unit="ms", utc=True)
-            col_time = "datetime_local"
+        # Intentar convertir el campo de tiempo a datetime (sin borrar la columna original)
+        try:
+            df_tablas["_parsed_time"] = pd.to_datetime(df_tablas[col_time], errors="coerce", utc=True)
+        except Exception:
+            st.warning(f"⚠️ No se pudo interpretar la columna de tiempo '{col_time}' como fecha.")
+            df_tablas["_parsed_time"] = pd.NaT
 
+        # Procesar por cada sonda
         for s in sorted(df_tablas[col_probe].dropna().unique()):
             df_sonda = df_tablas[df_tablas[col_probe] == s].copy()
 
-            # Ordenar del más reciente al más antiguo
-            df_sonda = df_sonda.sort_values(by=col_time, ascending=False)
+            # Ordenar por el campo de tiempo más reciente arriba
+            df_sonda = df_sonda.sort_values(by="_parsed_time", ascending=False)
 
-            # Obtener ISP
+            # Obtener ISP (si existe)
             isp = df_sonda[col_isp].iloc[0] if col_isp and col_isp in df_sonda.columns else "Desconocido"
 
-            # Título
+            # Título con nombre y ISP
             st.subheader(f"Sonda {s} – ISP: {isp}")
 
-            # Mostrar tabla (scroll + altura fija)
+            # Mostrar tabla con scroll vertical
             st.dataframe(
-                df_sonda,
+                df_sonda.drop(columns=["_parsed_time"]),
                 use_container_width=True,
-                height=320,  # Ajusta si quieres mostrar más o menos filas
+                height=350,  # puedes ajustar este valor
             )
+
             st.markdown("<br>", unsafe_allow_html=True)
 
     else:
@@ -433,6 +429,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ No hay suficientes columnas para generar la gráfica.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
