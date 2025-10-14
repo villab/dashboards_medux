@@ -178,33 +178,54 @@ def obtener_datos_pag_no_cache(url, headers, body):
 
 
 def flatten_results(raw_json):
-    """Normaliza cualquier respuesta de la API (lista o dict) a un DataFrame plano."""
+    """Normaliza cualquier respuesta de la API (lista o dict combinados) a un DataFrame plano."""
     filas = []
 
+    # 🔹 Detectar nivel de resultados
     if isinstance(raw_json, dict):
         results = raw_json.get("results", raw_json)
     else:
         results = raw_json
 
-    # 🔹 Caso 1: lista directa (network)
+    # ✅ Caso 1: results es una lista (como network)
     if isinstance(results, list):
         for item in results:
             if isinstance(item, dict):
-                item["program"] = "network"
+                item["program"] = item.get("program", "network")
                 filas.append(item)
 
-    # 🔹 Caso 2: dict con listas (otros programas)
+    # ✅ Caso 2: results es un dict (como ping-test, ftp-upload)
     elif isinstance(results, dict):
         for prog, lista in results.items():
             if isinstance(lista, list):
                 for item in lista:
                     if isinstance(item, dict):
-                        row = {"program": prog}
-                        row.update(item)
-                        filas.append(row)
+                        fila = {"program": prog}
+                        fila.update(item)
+                        filas.append(fila)
+            # 🔹 Si es dict anidado dentro de dict, intentar aplanar
+            elif isinstance(lista, dict):
+                fila = {"program": prog}
+                fila.update(lista)
+                filas.append(fila)
+
+    # ✅ Caso 3: results contiene mezcla de dict y list (como al combinar network con otros)
+    if not filas and isinstance(results, dict):
+        for key, val in results.items():
+            if isinstance(val, list):
+                for v in val:
+                    if isinstance(v, dict):
+                        fila = {"program": key}
+                        fila.update(v)
+                        filas.append(fila)
+            elif isinstance(val, dict):
+                fila = {"program": key}
+                fila.update(val)
+                filas.append(fila)
 
     df = pd.DataFrame(filas)
     return df
+
 
 
 # ===========================================================
@@ -426,6 +447,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
