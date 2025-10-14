@@ -86,8 +86,9 @@ st.session_state["hora_fin"] = hora_fin
 # ===========================================================
 # 🔄 Real-time y refresco automático
 # ===========================================================
-st_autorefresh(interval=30_000, key="real_time_refresh")
-usar_real_time = st.sidebar.checkbox("⏱️ Modo real-time (últimos 30 min)", value=True)
+st_autorefresh(interval=5 * 60 * 1000, key="real_time_refresh")
+
+usar_real_time = st.sidebar.checkbox("⏱️ Modo real-time", value=True)
 
 if usar_real_time:
     ahora_local = datetime.now(zona_local)
@@ -473,6 +474,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ No se encontró ninguna columna de sonda ('probe', 'probe_id', 'probeId' o 'probes_id').")
 else:
     st.info("👈 Consulta primero la API para mostrar las tablas por sonda.")
+
 
 
 
