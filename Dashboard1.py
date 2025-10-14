@@ -383,6 +383,31 @@ else:
 
 
 
+# ===========================================================
+# 📋 Tablas por Sonda (una debajo de otra)
+# ===========================================================
+st.markdown("<br><br>", unsafe_allow_html=True)
+st.markdown("## 📋 Resultados por Sonda")
+
+if "df" in st.session_state and not st.session_state.df.empty:
+    df_tablas = st.session_state.df.copy()
+    col_probe = next((c for c in ["probe", "probe_id", "probeId", "probes_id"] if c in df_tablas.columns), None)
+    col_time = next((c for c in ["timestamp", "ts", "datetime", "createdAt"] if c in df_tablas.columns), None)
+
+    if col_probe:
+        for s in sorted(df_tablas[col_probe].dropna().unique()):
+            st.subheader(f"Sonda {s}")
+            df_sonda = df_tablas[df_tablas[col_probe] == s].copy()
+            if col_time:
+                df_sonda[col_time] = pd.to_numeric(df_sonda[col_time], errors="coerce")
+                df_sonda = df_sonda.sort_values(by=col_time, ascending=False, na_position="last")
+            st.dataframe(df_sonda.head(20), use_container_width=True)  # puedes cambiar el .head(20)
+            st.markdown("<br>", unsafe_allow_html=True)
+    else:
+        st.warning("⚠️ No se encontró ninguna columna de sonda ('probe', 'probe_id', 'probeId' o 'probes_id').")
+else:
+    st.info("👈 Consulta primero la API para mostrar las tablas por sonda.")
+
 
 
 
