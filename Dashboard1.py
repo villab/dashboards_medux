@@ -222,55 +222,48 @@ else:
 
 
 # ===========================================================
-# 🟢 Tabla resumen de estado por sonda
+# 📋 Tablas por Sonda (orden descendente + scroll fijo)
 # ===========================================================
-st.markdown("## 🟩 Estado general de sondas")
+st.markdown("<br><br>", unsafe_allow_html=True)
+st.markdown("## 📋 Resultados por Sonda")
 
 if "df" in st.session_state and not st.session_state.df.empty:
-    df_estado = st.session_state.df.copy()
-    col_probe = next((c for c in ["probe", "probe_id", "probeId", "probes_id"] if c in df_estado.columns), None)
-    col_isp = next((c for c in ["isp", "provider", "operator"] if c in df_estado.columns), None)
-    col_time = next((c for c in ["dateStart", "ts", "datetime", "createdAt"] if c in df_estado.columns), None)
+    df_tablas = st.session_state.df.copy()
 
-    if col_probe and col_time:
-        # Convertir timestamp a datetime si es necesario
-        df_estado[col_time] = pd.to_datetime(df_estado[col_time], errors="coerce", unit="s", utc=True).dt.tz_convert("America/Bogota")
+    # Identificar columnas relevantes
+    col_probe = next((c for c in ["probe", "probe_id", "probeId", "probes_id"] if c in df_tablas.columns), None)
+    col_time = next((c for c in ["timestamp", "ts", "datetime", "createdAt"] if c in df_tablas.columns), None)
+    col_isp = next((c for c in ["isp", "ISP", "provider"] if c in df_tablas.columns), None)
 
-        # Obtener el último registro por sonda
-        resumen = (
-            df_estado.sort_values(by=col_time, ascending=False)
-            .groupby(col_probe)
-            .agg({
-                col_time: "first",
-                col_isp: lambda x: ", ".join(sorted(set(x.dropna()))) if col_isp else "Desconocido"
-            })
-            .reset_index()
-            .rename(columns={col_probe: "Sonda", col_time: "Último reporte", col_isp: "ISP"})
-        )
+    if col_probe:
+        for s in sorted(df_tablas[col_probe].dropna().unique()):
+            df_sonda = df_tablas[df_tablas[col_probe] == s].copy()
 
-        # Calcular diferencia de tiempo
-        now = pd.Timestamp.now(tz="America/Bogota")
-        resumen["Minutos desde último reporte"] = (now - resumen["Último reporte"]).dt.total_seconds() / 60
+            # --- Ordenar del más reciente al más antiguo ---
+            if col_time:
+                # Convertir a datetime (milisegundos → ms, ajusta si tu campo está en segundos)
+                df_sonda[col_time] = pd.to_numeric(df_sonda[col_time], errors="coerce")
+                df_sonda["datetime_local"] = pd.to_datetime(df_sonda[col_time], unit="ms", utc=True)
+                df_sonda = df_sonda.sort_values(by="datetime_local", ascending=False)
 
-        # Determinar estado ON/OFF
-        resumen["Estado"] = resumen["Minutos desde último reporte"].apply(lambda x: "🟢 ON" if x <= 20 else "🔴 OFF")
+            # --- Obtener ISP si está disponible ---
+            isp = df_sonda[col_isp].iloc[0] if col_isp and col_isp in df_sonda.columns else "Desconocido"
 
-        # Reordenar columnas
-        resumen = resumen[["Sonda", "ISP", "Último reporte", "Minutos desde último reporte", "Estado"]]
+            # --- Título de tabla ---
+            st.subheader(f"Sonda {s} – ISP: {isp}")
 
-        # Mostrar la tabla
-        st.dataframe(
-            resumen.sort_values(by="Último reporte", ascending=False),
-            use_container_width=True
-        )
-
-        # Pequeña nota
-        st.caption("🕒 Estado calculado según la fecha del último registro recibido por sonda (ON = < 20 min).")
+            # --- Mostrar tabla con scroll y tamaño fijo ---
+            st.dataframe(
+                df_sonda,
+                use_container_width=True,
+                height=300  # altura fija (muestra ~10 filas con scroll)
+            )
+            st.markdown("<br>", unsafe_allow_html=True)
 
     else:
-        st.warning("⚠️ No se encontraron columnas de sonda o tiempo en los datos.")
+        st.warning("⚠️ No se encontró ninguna columna de sonda ('probe', 'probe_id', 'probeId' o 'probes_id').")
 else:
-    st.info("👈 Consulta primero la API para visualizar el resumen de sondas.")
+    st.info("👈 Consulta primero la API para visualizar las tablas por sonda.")
 
 # ===========================================================
 # 🌍 Mapas de mediciones por ISP (3 por fila)
@@ -474,6 +467,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ No se encontró ninguna columna de sonda ('probe', 'probe_id', 'probeId' o 'probes_id').")
 else:
     st.info("👈 Consulta primero la API para mostrar las tablas por sonda.")
+
 
 
 
