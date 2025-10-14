@@ -120,8 +120,9 @@ body = {
 }
 
 # ===========================================================
-# 🔹 FUNCIONES API
+# 🔹 FUNCIONES API (actualizadas)
 # ===========================================================
+
 @st.cache_data(ttl=1800)
 def obtener_datos_pag(url, headers, body):
     todos_los_resultados = {}
@@ -129,6 +130,7 @@ def obtener_datos_pag(url, headers, body):
     total = 0
 
     while True:
+        st.info(f"📡 Descargando página {pagina}...")
         r = requests.post(url, headers=headers, json=body)
         if r.status_code != 200:
             st.error(f"❌ Error API: {r.status_code}")
@@ -137,13 +139,17 @@ def obtener_datos_pag(url, headers, body):
         data = r.json()
         results = data.get("results", {})
 
-        if isinstance(results, dict):
-            for prog, res in results.items():
-                todos_los_resultados.setdefault(prog, []).extend(res)
-                total += len(res)
-        elif isinstance(results, list):
-            todos_los_resultados.setdefault("general", []).extend(results)
+        # Caso 1: lista directa (como network)
+        if isinstance(results, list):
+            todos_los_resultados.setdefault("network", []).extend(results)
             total += len(results)
+
+        # Caso 2: diccionario de programas
+        elif isinstance(results, dict):
+            for prog, res in results.items():
+                if isinstance(res, list):
+                    todos_los_resultados.setdefault(prog, []).extend(res)
+                    total += len(res)
 
         next_data = data.get("next_pagination_data")
         if not next_data:
@@ -151,6 +157,7 @@ def obtener_datos_pag(url, headers, body):
         body["pagination_data"] = next_data
         pagina += 1
 
+    st.success(f"✅ {total:,} registros descargados en {pagina} página(s).")
     return todos_los_resultados
 
 
@@ -168,18 +175,30 @@ def obtener_datos_pag_no_cache(url, headers, body):
 
 def flatten_results(raw_json):
     filas = []
-    if isinstance(raw_json, dict):
-        for prog, results in raw_json.items():
-            if isinstance(results, list):
-                for item in results:
-                    row = {"program": prog}
-                    if isinstance(item, dict):
-                        row.update(item)
-                    filas.append(row)
-    elif isinstance(raw_json, list):
-        for item in raw_json:
+
+    # Normaliza estructura: puede venir en distintas formas
+    results = raw_json.get("results", raw_json) if isinstance(raw_json, dict) else raw_json
+
+    # Caso 1: results = lista (como network)
+    if isinstance(results, list):
+        for item in results:
             if isinstance(item, dict):
+                item["program"] = "network"
                 filas.append(item)
+
+    # Caso 2: results = dict (ping-test, voice-out, etc.)
+    elif isinstance(results, dict):
+        for prog, registros in results.items():
+            if isinstance(registros, list):
+                for item in registros:
+                    if isinstance(item, dict):
+                        row = {"program": prog}
+                        row.update(item)
+                        filas.append(row)
+
+    else:
+        st.warning("⚠️ Formato inesperado en flatten_results().")
+
     return pd.DataFrame(filas)
 
 # ===========================================================
@@ -398,4 +417,5 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
