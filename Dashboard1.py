@@ -84,41 +84,28 @@ st.session_state["fecha_fin"] = fecha_fin
 st.session_state["hora_fin"] = hora_fin
 
 # ===========================================================
-# 🔄 Real-time y refresco automático
-# ===========================================================
-# ===========================================================
-# 🔄 Real-time y refresco automático mejorado
+# 🔄 Real-time y refresco automático (usa rango superior)
 # ===========================================================
 from streamlit_autorefresh import st_autorefresh
 
 st.sidebar.markdown("---")
 st.sidebar.header("⏱️ Actualización en tiempo real")
 
-# Intervalo fijo de 30 segundos
-refresh_seconds = 30
+refresh_seconds = 30  # frecuencia de actualización (30 s)
 st_autorefresh(interval=refresh_seconds * 1000, key="real_time_refresh")
 
-# Checkbox para activar/desactivar modo realtime
 usar_real_time = st.sidebar.checkbox("Activar actualización automática", value=True)
 
-# Controles de rango de tiempo (para ambos modos)
-col_rt1, col_rt2 = st.sidebar.columns(2)
 zona_local = pytz.timezone("America/Bogota")
 ahora_local = datetime.now(zona_local)
 
-# Si está en realtime, usar últimos 30 min automáticamente
 if usar_real_time:
+    # 🔁 Últimas 6 horas automáticas
     ts_end = int(ahora_local.astimezone(pytz.utc).timestamp() * 1000)
-    ts_start = int((ahora_local - timedelta(minutes=30)).astimezone(pytz.utc).timestamp() * 1000)
-    st.sidebar.caption(f"🔁 Modo realtime activo → Últimos 30 min (actualiza cada {refresh_seconds}s)")
+    ts_start = int((ahora_local - timedelta(hours=6)).astimezone(pytz.utc).timestamp() * 1000)
+    st.sidebar.caption(f"🔁 Modo realtime activo → Últimas 6 h (actualiza cada {refresh_seconds}s)")
 else:
-    st.sidebar.caption("📅 Selecciona el rango de tiempo manualmente")
-
-    fecha_inicio = col_rt1.date_input("Fecha inicio", ahora_local.date() - timedelta(days=1))
-    hora_inicio = col_rt1.time_input("Hora inicio", time(0, 0))
-    fecha_fin = col_rt2.date_input("Fecha fin", ahora_local.date())
-    hora_fin = col_rt2.time_input("Hora fin", ahora_local.time())
-
+    # 🧭 Usa el rango definido en la parte superior del panel lateral
     dt_inicio_local = zona_local.localize(datetime.combine(fecha_inicio, hora_inicio))
     dt_fin_local = zona_local.localize(datetime.combine(fecha_fin, hora_fin))
 
@@ -128,13 +115,15 @@ else:
 
     ts_start = int(dt_inicio_local.astimezone(pytz.utc).timestamp() * 1000)
     ts_end = int(dt_fin_local.astimezone(pytz.utc).timestamp() * 1000)
+    st.sidebar.caption("📅 Rango de tiempo definido manualmente")
 
-# Mostrar resumen en el sidebar
+# Mostrar resumen de rango activo
 st.sidebar.markdown("### 🕒 Rango activo")
 inicio_local_str = datetime.fromtimestamp(ts_start / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
 fin_local_str = datetime.fromtimestamp(ts_end / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
 st.sidebar.write(f"Inicio local: {inicio_local_str}")
 st.sidebar.write(f"Fin local: {fin_local_str}")
+
 
 
 # ===========================================================
@@ -457,6 +446,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ No hay suficientes columnas para generar la gráfica.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
