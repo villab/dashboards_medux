@@ -219,6 +219,58 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
 else:
     df = st.session_state.df
 
+
+# ===========================================================
+# 🟢 Tabla resumen de estado por sonda
+# ===========================================================
+st.markdown("## 🟩 Estado general de sondas")
+
+if "df" in st.session_state and not st.session_state.df.empty:
+    df_estado = st.session_state.df.copy()
+    col_probe = next((c for c in ["probe", "probe_id", "probeId", "probes_id"] if c in df_estado.columns), None)
+    col_isp = next((c for c in ["isp", "provider", "operator"] if c in df_estado.columns), None)
+    col_time = next((c for c in ["timestamp", "ts", "datetime", "createdAt"] if c in df_estado.columns), None)
+
+    if col_probe and col_time:
+        # Convertir timestamp a datetime si es necesario
+        df_estado[col_time] = pd.to_datetime(df_estado[col_time], errors="coerce", unit="s", utc=True).dt.tz_convert("America/Bogota")
+
+        # Obtener el último registro por sonda
+        resumen = (
+            df_estado.sort_values(by=col_time, ascending=False)
+            .groupby(col_probe)
+            .agg({
+                col_time: "first",
+                col_isp: lambda x: ", ".join(sorted(set(x.dropna()))) if col_isp else "Desconocido"
+            })
+            .reset_index()
+            .rename(columns={col_probe: "Sonda", col_time: "Último reporte", col_isp: "ISP"})
+        )
+
+        # Calcular diferencia de tiempo
+        now = pd.Timestamp.now(tz="America/Bogota")
+        resumen["Minutos desde último reporte"] = (now - resumen["Último reporte"]).dt.total_seconds() / 60
+
+        # Determinar estado ON/OFF
+        resumen["Estado"] = resumen["Minutos desde último reporte"].apply(lambda x: "🟢 ON" if x <= 20 else "🔴 OFF")
+
+        # Reordenar columnas
+        resumen = resumen[["Sonda", "ISP", "Último reporte", "Minutos desde último reporte", "Estado"]]
+
+        # Mostrar la tabla
+        st.dataframe(
+            resumen.sort_values(by="Último reporte", ascending=False),
+            use_container_width=True
+        )
+
+        # Pequeña nota
+        st.caption("🕒 Estado calculado según la fecha del último registro recibido por sonda (ON = < 20 min).")
+
+    else:
+        st.warning("⚠️ No se encontraron columnas de sonda o tiempo en los datos.")
+else:
+    st.info("👈 Consulta primero la API para visualizar el resumen de sondas.")
+
 # ===========================================================
 # 🌍 Mapas de mediciones por ISP (3 por fila)
 # ===========================================================
@@ -421,6 +473,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ No se encontró ninguna columna de sonda ('probe', 'probe_id', 'probeId' o 'probes_id').")
 else:
     st.info("👈 Consulta primero la API para mostrar las tablas por sonda.")
+
 
 
 
