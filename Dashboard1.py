@@ -213,6 +213,60 @@ else:
     df = st.session_state.df
 
 # ===========================================================
+# 📊 TABLA RESUMEN DE ESTADO DE SONDA (ON/OFF)
+# ===========================================================
+st.markdown("## 📡 Estado de sondas (resumen)")
+
+if "df" in st.session_state and not st.session_state.df.empty:
+    df_resumen = st.session_state.df.copy()
+
+    # Detectar columnas clave
+    col_probe = next((c for c in ["probe", "probe_id", "probeId", "probes_id"] if c in df_resumen.columns), None)
+    col_time = next((c for c in ["dateStart", "timestamp", "datetime", "createdAt"] if c in df_resumen.columns), None)
+    col_isp = next((c for c in ["isp", "provider", "network"] if c in df_resumen.columns), None)
+
+    if col_probe and col_time:
+        # Convertir fecha a datetime y ordenar
+        df_resumen[col_time] = pd.to_datetime(df_resumen[col_time], errors="coerce")
+        df_resumen = df_resumen.dropna(subset=[col_time])
+
+        # Último registro por sonda
+        df_last = (
+            df_resumen.sort_values(by=col_time)
+            .groupby(col_probe)
+            .tail(1)
+            .reset_index(drop=True)
+        )
+
+        # Calcular estado ON/OFF (últimos 20 min)
+        now_local = datetime.now(pytz.timezone("US/Pacific"))
+        df_last["minutes_since"] = (now_local - df_last[col_time]).dt.total_seconds() / 60
+        df_last["Estado"] = df_last["minutes_since"].apply(lambda x: "🟢 ON" if x <= 20 else "🔴 OFF")
+
+        # Mantener columnas relevantes
+        columnas = [col_probe, col_isp, col_time, "Estado"]
+        columnas_presentes = [c for c in columnas if c in df_last.columns]
+
+        # Renombrar para presentación
+        df_show = df_last[columnas_presentes].rename(
+            columns={
+                col_probe: "Sonda",
+                col_isp: "ISP",
+                col_time: "Último reporte"
+            }
+        )
+
+        # Ordenar: primero las activas
+        df_show = df_show.sort_values(by=["Estado", "Último reporte"], ascending=[False, False])
+
+        # Mostrar tabla
+        st.dataframe(df_show, use_container_width=True, height=300)
+    else:
+        st.warning("⚠️ No se encontraron columnas de sonda o tiempo en los datos.")
+else:
+    st.info("👈 Ejecuta la consulta para mostrar el resumen de sondas.")
+
+# ===========================================================
 # 📋 TABLAS POR SONDA
 # ===========================================================
 st.markdown("## 📋 Resultados por Sonda")
@@ -344,3 +398,4 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
