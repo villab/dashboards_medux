@@ -220,9 +220,8 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
 else:
     df = st.session_state.df
 
-
 # ===========================================================
-# 📋 Tablas por Sonda (orden descendente + scroll fijo)
+# 📋 Tablas por Sonda (ordenadas por dateStart + scroll)
 # ===========================================================
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown("## 📋 Resultados por Sonda")
@@ -230,40 +229,50 @@ st.markdown("## 📋 Resultados por Sonda")
 if "df" in st.session_state and not st.session_state.df.empty:
     df_tablas = st.session_state.df.copy()
 
-    # Identificar columnas relevantes
+    # Identificar columnas
     col_probe = next((c for c in ["probe", "probe_id", "probeId", "probes_id"] if c in df_tablas.columns), None)
-    col_time = next((c for c in ["timestamp", "ts", "datetime", "createdAt"] if c in df_tablas.columns), None)
+    col_time = next((c for c in ["dateStart", "timestamp", "ts", "datetime", "createdAt"] if c in df_tablas.columns), None)
     col_isp = next((c for c in ["isp", "ISP", "provider"] if c in df_tablas.columns), None)
 
-    if col_probe:
+    if col_probe and col_time:
+        # Convertir dateStart o timestamp a datetime
+        df_tablas[col_time] = pd.to_numeric(df_tablas[col_time], errors="coerce")
+        # Intentar interpretar dateStart como ISO si no es numérico
+        if df_tablas[col_time].isna().all() and "dateStart" in df_tablas.columns:
+            try:
+                df_tablas["dateStart_dt"] = pd.to_datetime(df_tablas["dateStart"], errors="coerce", utc=True)
+                col_time = "dateStart_dt"
+            except Exception:
+                pass
+        else:
+            df_tablas["datetime_local"] = pd.to_datetime(df_tablas[col_time], unit="ms", utc=True)
+            col_time = "datetime_local"
+
         for s in sorted(df_tablas[col_probe].dropna().unique()):
             df_sonda = df_tablas[df_tablas[col_probe] == s].copy()
 
-            # --- Ordenar del más reciente al más antiguo ---
-            if col_time:
-                # Convertir a datetime (milisegundos → ms, ajusta si tu campo está en segundos)
-                df_sonda[col_time] = pd.to_numeric(df_sonda[col_time], errors="coerce")
-                df_sonda["datetime_local"] = pd.to_datetime(df_sonda[col_time], unit="ms", utc=True)
-                df_sonda = df_sonda.sort_values(by="datetime_local", ascending=False)
+            # Ordenar del más reciente al más antiguo
+            df_sonda = df_sonda.sort_values(by=col_time, ascending=False)
 
-            # --- Obtener ISP si está disponible ---
+            # Obtener ISP
             isp = df_sonda[col_isp].iloc[0] if col_isp and col_isp in df_sonda.columns else "Desconocido"
 
-            # --- Título de tabla ---
+            # Título
             st.subheader(f"Sonda {s} – ISP: {isp}")
 
-            # --- Mostrar tabla con scroll y tamaño fijo ---
+            # Mostrar tabla (scroll + altura fija)
             st.dataframe(
                 df_sonda,
                 use_container_width=True,
-                height=300  # altura fija (muestra ~10 filas con scroll)
+                height=320,  # Ajusta si quieres mostrar más o menos filas
             )
             st.markdown("<br>", unsafe_allow_html=True)
 
     else:
-        st.warning("⚠️ No se encontró ninguna columna de sonda ('probe', 'probe_id', 'probeId' o 'probes_id').")
+        st.warning("⚠️ No se encontró ninguna columna de sonda o fecha ('probe', 'dateStart', 'timestamp', etc.).")
 else:
     st.info("👈 Consulta primero la API para visualizar las tablas por sonda.")
+
 # ===========================================================
 # 🌍 Mapas de mediciones por ISP (3 por fila)
 # ===========================================================
@@ -424,6 +433,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ No hay suficientes columnas para generar la gráfica.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
