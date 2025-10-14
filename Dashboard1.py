@@ -311,7 +311,7 @@ else:
     st.info("👈 Consulta primero la API para visualizar los mapas.")
 
 
-
+st.markdown("<br><br>", unsafe_allow_html=True)
 # ===========================================================
 # 📊 Gráfica de dispersión interactiva
 # ===========================================================
@@ -379,6 +379,7 @@ if "df" in st.session_state and not st.session_state.df.empty:
         st.warning("⚠️ No hay suficientes columnas para generar la gráfica.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
