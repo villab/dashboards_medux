@@ -48,7 +48,7 @@ st.sidebar.header("⚙️ Parámetros de consulta")
 
 programas = st.sidebar.multiselect(
     "Selecciona los programas",
-    ["youtube-api", "confess-chrome", "ping-test","network","voice-out","cloud-download","cloud-upload"],
+    ["confess-chrome", "ping-test","network","voice-out","cloud-download","cloud-upload"],
     default=["ping-test"]
 )
 
