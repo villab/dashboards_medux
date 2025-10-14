@@ -64,7 +64,6 @@ st.sidebar.header("⏱️ Actualización automática")
 refresh_seconds = st.sidebar.slider("Frecuencia de refresco (segundos)", 10, 300, 30)
 usar_real_time = st.sidebar.checkbox("Activar modo realtime (últimas 6 h)", value=False)
 
-# Si está activado, forzar refresco visual
 if usar_real_time:
     st_autorefresh(interval=refresh_seconds * 1000, key="real_time_refresh")
 
@@ -130,7 +129,6 @@ def obtener_datos_pag(url, headers, body):
     total = 0
 
     while True:
-        st.info(f"📡 Descargando página {pagina}...")
         r = requests.post(url, headers=headers, json=body)
         if r.status_code != 200:
             st.error(f"❌ Error API: {r.status_code}")
@@ -153,7 +151,6 @@ def obtener_datos_pag(url, headers, body):
         body["pagination_data"] = next_data
         pagina += 1
 
-    st.success(f"✅ {total:,} registros descargados en {pagina} página(s).")
     return todos_los_resultados
 
 
@@ -171,12 +168,18 @@ def obtener_datos_pag_no_cache(url, headers, body):
 
 def flatten_results(raw_json):
     filas = []
-    for prog, results in raw_json.items():
-        for item in results:
-            row = {"program": prog}
+    if isinstance(raw_json, dict):
+        for prog, results in raw_json.items():
+            if isinstance(results, list):
+                for item in results:
+                    row = {"program": prog}
+                    if isinstance(item, dict):
+                        row.update(item)
+                    filas.append(row)
+    elif isinstance(raw_json, list):
+        for item in raw_json:
             if isinstance(item, dict):
-                row.update(item)
-            filas.append(row)
+                filas.append(item)
     return pd.DataFrame(filas)
 
 # ===========================================================
@@ -186,22 +189,22 @@ if "df" not in st.session_state:
     st.session_state.df = pd.DataFrame()
 
 if st.sidebar.button("🚀 Consultar API") or usar_real_time:
-    if usar_real_time:
-        raw = obtener_datos_pag_no_cache(url, headers, body)
-        if not raw or "results" not in raw:
-            st.warning("⚠️ No se recibieron datos válidos del modo realtime.")
-            st.stop()
-        data = raw["results"]  # ✅ Igualar estructura al modo normal
-    else:
-        data = obtener_datos_pag(url, headers, body)
+    raw = obtener_datos_pag_no_cache(url, headers, body) if usar_real_time else obtener_datos_pag(url, headers, body)
+    if not raw:
+        st.warning("⚠️ No se recibieron datos de la API.")
+        st.stop()
 
-    if not data:
+    if isinstance(raw, dict):
+        data = raw.get("results", raw)
+    elif isinstance(raw, list):
+        data = {"resultados": raw}
+    else:
+        st.error("❌ Formato inesperado de respuesta de la API.")
         st.stop()
 
     df = flatten_results(data)
-
     if df.empty:
-        st.warning("⚠️ No se recibieron datos.")
+        st.warning("⚠️ No se recibieron datos válidos.")
         st.stop()
 
     st.session_state.df = df
@@ -234,7 +237,7 @@ else:
     st.info("👈 Consulta primero la API para visualizar resultados.")
 
 # ===========================================================
-# 🌍 MAPAS POR ISP
+# 🗺️ MAPAS POR ISP
 # ===========================================================
 st.markdown("## 🗺️ Mapas por ISP")
 
@@ -341,4 +344,3 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
-
