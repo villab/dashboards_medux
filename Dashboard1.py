@@ -178,52 +178,48 @@ def obtener_datos_pag_no_cache(url, headers, body):
 
 
 def flatten_results(raw_json):
-    """Normaliza cualquier respuesta de la API (lista o dict combinados) a un DataFrame plano."""
+    """Normaliza cualquier respuesta de la API, incluyendo combinaciones de dict y list."""
     filas = []
 
-    # 🔹 Detectar nivel de resultados
-    if isinstance(raw_json, dict):
-        results = raw_json.get("results", raw_json)
-    else:
-        results = raw_json
+    def extraer_filas(obj, program=None):
+        """Función recursiva para explorar y extraer dicts con datos."""
+        if isinstance(obj, dict):
+            # Caso: diccionario con clave 'results'
+            if "results" in obj:
+                extraer_filas(obj["results"], program)
+            else:
+                # Caso: diccionario con listas de programas (ping-test, ftp-upload, etc.)
+                tiene_lista = False
+                for k, v in obj.items():
+                    if isinstance(v, list):
+                        tiene_lista = True
+                        extraer_filas(v, k)
+                if not tiene_lista:
+                    # Caso: dict plano → fila directa
+                    fila = obj.copy()
+                    if program:
+                        fila["program"] = fila.get("program", program)
+                    filas.append(fila)
 
-    # ✅ Caso 1: results es una lista (como network)
-    if isinstance(results, list):
-        for item in results:
-            if isinstance(item, dict):
-                item["program"] = item.get("program", "network")
-                filas.append(item)
+        elif isinstance(obj, list):
+            # Caso: lista → iterar y procesar elementos
+            for item in obj:
+                extraer_filas(item, program)
 
-    # ✅ Caso 2: results es un dict (como ping-test, ftp-upload)
-    elif isinstance(results, dict):
-        for prog, lista in results.items():
-            if isinstance(lista, list):
-                for item in lista:
-                    if isinstance(item, dict):
-                        fila = {"program": prog}
-                        fila.update(item)
-                        filas.append(fila)
-            # 🔹 Si es dict anidado dentro de dict, intentar aplanar
-            elif isinstance(lista, dict):
-                fila = {"program": prog}
-                fila.update(lista)
-                filas.append(fila)
+    # 🔹 Inicia el proceso con el JSON raíz
+    extraer_filas(raw_json)
 
-    # ✅ Caso 3: results contiene mezcla de dict y list (como al combinar network con otros)
-    if not filas and isinstance(results, dict):
-        for key, val in results.items():
-            if isinstance(val, list):
-                for v in val:
-                    if isinstance(v, dict):
-                        fila = {"program": key}
-                        fila.update(v)
-                        filas.append(fila)
-            elif isinstance(val, dict):
-                fila = {"program": key}
-                fila.update(val)
-                filas.append(fila)
+    # 🔹 Normalización final
+    if not filas:
+        print("⚠️ No se extrajeron filas del JSON.")
+        return pd.DataFrame()
 
     df = pd.DataFrame(filas)
+
+    # Asegurar columna 'program' aunque no exista
+    if "program" not in df.columns:
+        df["program"] = "network"
+
     return df
 
 
@@ -447,6 +443,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
