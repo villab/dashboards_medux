@@ -323,7 +323,7 @@ else:
     df = st.session_state.df.copy()
 
     # --- 🔹 Columnas fijas (siempre visibles)
-    columnas_fijas = ["probeId", "isp", "dateStart", "test"]  # puedes ajustar las fijas aquí
+    columnas_fijas = ["probeId", "isp", "dateStart", "test", "latitude", "longitude", "success"]  # puedes ajustar las fijas aquí
 
     # --- 🔹 Detectar columnas adicionales disponibles
     columnas_extra = [c for c in df.columns if c not in columnas_fijas]
@@ -475,6 +475,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
