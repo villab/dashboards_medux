@@ -10,7 +10,7 @@ from streamlit_autorefresh import st_autorefresh
 # 🧠 CONFIGURACIÓN INICIAL
 # ===========================================================
 st.set_page_config(page_title="Medux Verveba Dashboard", layout="wide")
-st.title("📊 Dashboard Verveba Mobile")
+st.markdown("## 📊 Dashboard Verveba Mobile")
 
 # ===========================================================
 # 🔹 AUTENTICACIÓN
@@ -75,7 +75,7 @@ ahora_local = datetime.now(zona_local)
 inicio_defecto_local = ahora_local - timedelta(days=1)
 
 st.sidebar.markdown("---")
-st.sidebar.header("📅 Rango de fechas (modo manual)")
+st.sidebar.header("📅 Rango de fechas")
 
 fecha_inicio = st.sidebar.date_input("Fecha de inicio", inicio_defecto_local.date())
 hora_inicio = st.sidebar.time_input("Hora de inicio", inicio_defecto_local.time())
@@ -260,7 +260,7 @@ else:
 # ===========================================================
 # 📊 TABLA RESUMEN DE ESTADO DE SONDA (ON/OFF)
 # ===========================================================
-st.markdown("## 📡 Estado de sondas (resumen)")
+st.markdown("### 📡 Estado de sondas")
 
 if "df" in st.session_state and not st.session_state.df.empty:
     df_resumen = st.session_state.df.copy()
@@ -475,6 +475,8 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
+
 
 
 
