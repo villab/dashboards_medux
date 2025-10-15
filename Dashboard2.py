@@ -290,3 +290,80 @@ else:
             with st.expander(f"📡 Sonda {sonda} ({len(df_sonda)} registros)", expanded=True):
                 st.dataframe(df_sonda[columnas_finales], use_container_width=True, height=350)
 
+# ===========================================================
+# 🗺️ MAPAS POR ISP
+# ===========================================================
+st.markdown("### 🗺️ Mapas por ISP")
+
+if "df" in st.session_state and not st.session_state.df.empty:
+    df_mapas = st.session_state.df.copy()
+
+    # Buscar columnas de coordenadas
+    if all(c in df_mapas.columns for c in ["latitude", "longitude"]):
+        isps = sorted(df_mapas["isp"].dropna().unique())
+        num_isps = len(isps)
+        cols = st.columns(num_isps if num_isps <= 3 else 3)
+
+        for idx, isp in enumerate(isps):
+            with cols[idx % 3]:
+                df_isp = df_mapas[df_mapas["isp"] == isp].copy()
+                if not df_isp.empty:
+                    lat_range = df_isp["latitude"].max() - df_isp["latitude"].min()
+                    lon_range = df_isp["longitude"].max() - df_isp["longitude"].min()
+                    if lat_range < 0.1 and lon_range < 0.1:
+                        zoom_auto = 15
+                    elif lat_range < 1 and lon_range < 1:
+                        zoom_auto = 13
+                    elif lat_range < 5 and lon_range < 5:
+                        zoom_auto = 11
+                    else:
+                        zoom_auto = 9
+
+                    hover_cols = [c for c in ["probeId", "provider", "technologyLabel", "avgLatency", "subtechnology"] if c in df_isp.columns]
+                    fig = px.scatter_mapbox(
+                        df_isp,
+                        lat="latitude",
+                        lon="longitude",
+                        hover_name="probeId" if "probeId" in df_isp.columns else None,
+                        hover_data=hover_cols,
+                        color="provider" if "provider" in df_isp.columns else None,
+                        zoom=zoom_auto,
+                        height=350
+                    )
+                    fig.update_layout(mapbox_style="open-street-map", margin=dict(r=0, t=0, l=0, b=0))
+                    st.markdown(f"**{isp}**")
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info(f"Sin datos para {isp}")
+    else:
+        st.warning("⚠️ No se encontraron columnas de latitud/longitud.")
+else:
+    st.info("👈 Ejecuta la consulta para ver los mapas.")
+
+# ===========================================================
+# 📈 GRÁFICA DINÁMICA (selector de ejes)
+# ===========================================================
+st.markdown("### 📈 Análisis de Métricas")
+
+if "df" in st.session_state and not st.session_state.df.empty:
+    df_plot = st.session_state.df.copy()
+
+    opciones = [c for c in df_plot.columns if pd.api.types.is_numeric_dtype(df_plot[c])]
+    if len(opciones) >= 2:
+        eje_x = st.selectbox("Eje X", opciones, key="eje_x")
+        eje_y = st.selectbox("Eje Y", opciones, key="eje_y")
+
+        fig_scatter = px.scatter(
+            df_plot,
+            x=eje_x,
+            y=eje_y,
+            color=df_plot["isp"] if "isp" in df_plot.columns else None,
+            hover_data=["probeId", "provider"] if all(c in df_plot.columns for c in ["probeId", "provider"]) else None,
+            title=f"Relación entre {eje_x} y {eje_y}"
+        )
+        st.plotly_chart(fig_scatter, use_container_width=True)
+    else:
+        st.warning("⚠️ No hay suficientes columnas numéricas para graficar.")
+else:
+    st.info("👈 Ejecuta la consulta para mostrar la gráfica.")
+
