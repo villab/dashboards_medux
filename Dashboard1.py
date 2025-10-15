@@ -312,42 +312,50 @@ else:
     st.info("👈 Ejecuta la consulta para mostrar el resumen de sondas.")
 
 # ===========================================================
-# 📋 TABLAS POR SONDA (vista simplificada con acordeones)
+# 📊 VISUALIZACIÓN DE TABLAS POR SONDA (con acordeones + selector de columnas)
 # ===========================================================
-st.markdown("## 📋 Resultados por Sonda")
 
-if not df.empty:
-    df_tablas = df.copy()
-    col_probe = next((c for c in ["probe", "probe_id", "probeId", "probes_id"] if c in df_tablas.columns), None)
-    col_time = next((c for c in ["dateStart", "timestamp", "ts", "datetime", "createdAt"] if c in df_tablas.columns), None)
-    col_isp = next((c for c in ["isp", "ISP", "provider"] if c in df_tablas.columns), None)
+st.markdown("### 📈 Datos por Sonda")
 
-    if col_probe and col_time:
-        df_tablas["_parsed_time"] = pd.to_datetime(df_tablas[col_time], errors="coerce", utc=True)
-
-        columnas_predeterminadas = [c for c in [col_probe, col_time, col_isp, "test", "success", "latitude", "longitude"] if c in df_tablas.columns]
-        columnas_extra = st.sidebar.multiselect(
-            "📋 Columnas adicionales a mostrar",
-            options=[c for c in df_tablas.columns if c not in columnas_predeterminadas + ["_parsed_time"]],
-            default=[],
-        )
-        columnas_a_mostrar = columnas_predeterminadas + columnas_extra
-
-        for s in sorted(df_tablas[col_probe].dropna().unique()):
-            df_sonda = df_tablas[df_tablas[col_probe] == s].sort_values(by="_parsed_time", ascending=False)
-            isp = df_sonda[col_isp].iloc[0] if col_isp else "Desconocido"
-
-            with st.expander(f"Sonda {s} – ISP: {isp}", expanded=False):
-                st.dataframe(
-                    df_sonda[columnas_a_mostrar].drop(columns=["_parsed_time"], errors="ignore"),
-                    use_container_width=True,
-                    height=350
-                )
-    else:
-        st.warning("⚠️ No se encontró columna de sonda o tiempo.")
+if "df" not in st.session_state or st.session_state.df.empty:
+    st.warning("⚠️ Aún no hay datos cargados. Usa el botón 'Consultar API'.")
 else:
-    st.info("👈 Consulta primero la API para visualizar resultados.")
+    df = st.session_state.df.copy()
 
+    # 🔹 Selector global de columnas
+    st.markdown("#### 🧩 Selecciona las columnas que quieres visualizar")
+    todas_columnas = list(df.columns)
+    
+    # columnas predeterminadas
+    columnas_predeterminadas = [
+        "probeId", "dateStart", "isp", 
+        "latitude", "longitude", "technology", "success"
+    ]
+    columnas_predeterminadas = [c for c in columnas_predeterminadas if c in todas_columnas]
+
+    columnas_visibles = st.multiselect(
+        "Columnas a mostrar",
+        options=todas_columnas,
+        default=columnas_predeterminadas,
+        help="Selecciona las columnas que deseas mostrar en todas las tablas"
+    )
+
+    # 🔸 Agrupar por sonda (si existe columna 'probeId')
+    if "probeId" not in df.columns:
+        st.error("❌ No se encontró la columna 'probeId' en los datos.")
+    else:
+        sondas = sorted(df["probeId"].unique())
+
+        # Mostrar cada sonda como un acordeón
+        for sonda in sondas:
+            df_sonda = df[df["probeId"] == sonda]
+
+            with st.expander(f"📡 Sonda: {sonda} ({len(df_sonda)} registros)", expanded=False):
+                if columnas_visibles:
+                    columnas_mostradas = [c for c in columnas_visibles if c in df_sonda.columns]
+                    st.dataframe(df_sonda[columnas_mostradas], use_container_width=True)
+                else:
+                    st.dataframe(df_sonda, use_container_width=True)
 
 # ===========================================================
 # 🗺️ MAPAS POR ISP
@@ -457,6 +465,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
