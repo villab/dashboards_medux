@@ -56,17 +56,19 @@ ahora_local = datetime.now(LOCAL_TZ)
 fecha_inicio_default = ahora_local - timedelta(hours=1)
 fecha_fin_default = ahora_local
 
+# Streamlit no acepta datetimes con tzinfo, así que quitamos la zona antes de mostrar
 fecha_inicio = st.sidebar.datetime_input(
     "📅 Fecha inicio",
-    value=fecha_inicio_default,
+    value=fecha_inicio_default.replace(tzinfo=None),
     key="fecha_inicio"
 )
 
 fecha_fin = st.sidebar.datetime_input(
     "📅 Fecha fin",
-    value=fecha_fin_default,
+    value=fecha_fin_default.replace(tzinfo=None),
     key="fecha_fin"
 )
+
 
 # Convertir a UTC antes de enviar al API (API suele requerir UTC)
 ts_start = (
@@ -503,6 +505,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
