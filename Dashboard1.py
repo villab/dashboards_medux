@@ -312,7 +312,7 @@ else:
     st.info("👈 Ejecuta la consulta para mostrar el resumen de sondas.")
 
 # ===========================================================
-# 📋 TABLAS POR SONDA (con selección de columnas)
+# 📋 TABLAS POR SONDA (vista simplificada con acordeones)
 # ===========================================================
 st.markdown("## 📋 Resultados por Sonda")
 
@@ -325,38 +325,24 @@ if not df.empty:
     if col_probe and col_time:
         df_tablas["_parsed_time"] = pd.to_datetime(df_tablas[col_time], errors="coerce", utc=True)
 
-        # 🔹 Columnas predeterminadas que siempre aparecen
-        columnas_predeterminadas = [
-            col_probe,
-            col_time,
-            col_isp,
-            "test",
-            "latitude",
-            "longitude",
-            "success"
-        ]
-        columnas_predeterminadas = [c for c in columnas_predeterminadas if c in df_tablas.columns]
-
-        # 🔹 Permitir al usuario elegir columnas adicionales
-        columnas_extra = st.multiselect(
-            "Selecciona columnas adicionales para mostrar en las tablas",
+        columnas_predeterminadas = [c for c in [col_probe, col_time, col_isp, "program", "latitude", "longitude"] if c in df_tablas.columns]
+        columnas_extra = st.sidebar.multiselect(
+            "📋 Columnas adicionales a mostrar",
             options=[c for c in df_tablas.columns if c not in columnas_predeterminadas + ["_parsed_time"]],
             default=[],
-            help="Selecciona las columnas que deseas incluir junto a las predeterminadas"
         )
-
         columnas_a_mostrar = columnas_predeterminadas + columnas_extra
 
         for s in sorted(df_tablas[col_probe].dropna().unique()):
             df_sonda = df_tablas[df_tablas[col_probe] == s].sort_values(by="_parsed_time", ascending=False)
             isp = df_sonda[col_isp].iloc[0] if col_isp else "Desconocido"
-            st.subheader(f"Sonda {s} – ISP: {isp}")
-            st.dataframe(
-                df_sonda[columnas_a_mostrar].drop(columns=["_parsed_time"], errors="ignore"),
-                use_container_width=True,
-                height=350
-            )
-            st.markdown("<br>", unsafe_allow_html=True)
+
+            with st.expander(f"Sonda {s} – ISP: {isp}", expanded=False):
+                st.dataframe(
+                    df_sonda[columnas_a_mostrar].drop(columns=["_parsed_time"], errors="ignore"),
+                    use_container_width=True,
+                    height=350
+                )
     else:
         st.warning("⚠️ No se encontró columna de sonda o tiempo.")
 else:
@@ -471,6 +457,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
