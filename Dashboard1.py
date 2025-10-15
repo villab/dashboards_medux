@@ -312,35 +312,35 @@ else:
     st.info("👈 Ejecuta la consulta para mostrar el resumen de sondas.")
 
 # ===========================================================
-# 📊 VISUALIZACIÓN DE TABLAS POR SONDA (acordeones + columnas fijas)
+# 📊 TABLAS POR SONDA (visibles + columnas fijas + selector)
 # ===========================================================
 
-st.markdown("### 📈 Datos por Sonda")
+st.markdown("### 📋 Resultados por Sonda")
 
 if "df" not in st.session_state or st.session_state.df.empty:
     st.warning("⚠️ Aún no hay datos cargados. Usa el botón 'Consultar API'.")
 else:
     df = st.session_state.df.copy()
 
-    # 🔹 Definir columnas fijas (no se pueden quitar)
-    columnas_fijas = ["probeId", "isp", "dateStart"]  # 👈 ajusta estas a tu gusto
+    # --- 🔹 Columnas fijas (siempre visibles)
+    columnas_fijas = ["probeId", "isp", "dateStart", "latitude", "longitude", "test", "success"]  # ajusta si quieres otras
 
-    # 🔹 Detectar las demás columnas disponibles
+    # --- 🔹 Detectar columnas adicionales disponibles
     columnas_extra = [c for c in df.columns if c not in columnas_fijas]
 
-    # 🔹 Selector de columnas adicionales
-    st.markdown("#### ➕ Selecciona columnas adicionales para mostrar")
+    # --- 🔹 Selector de columnas adicionales
+   
     columnas_adicionales = st.multiselect(
         "Columnas adicionales",
         options=columnas_extra,
-        default=[],  # nada preseleccionado
-        help="Selecciona columnas adicionales (las columnas base siempre estarán visibles)"
+        default=[],  # sin preselección
+        help="Las columnas base no se pueden quitar. Selecciona si quieres ver otras adicionales."
     )
 
-    # 🔹 Combinar columnas a mostrar
+    # --- 🔹 Combinar columnas a mostrar
     columnas_mostrar = columnas_fijas + columnas_adicionales
 
-    # 🔸 Agrupar por sonda
+    # --- 🔹 Agrupar por sonda
     if "probeId" not in df.columns:
         st.error("❌ No se encontró la columna 'probeId' en los datos.")
     else:
@@ -349,9 +349,23 @@ else:
         for sonda in sondas:
             df_sonda = df[df["probeId"] == sonda].copy()
 
-            # Ordenar por dateStart descendente (si existe)
+            # Ordenar por fecha más reciente arriba
             if "dateStart" in df_sonda.columns:
                 df_sonda["dateStart"] = pd.to_datetime(df_sonda["dateStart"], errors="coerce")
+                df_sonda = df_sonda.sort_values("dateStart", ascending=False)
+
+            # Mostrar cada tabla directamente (no dentro de un expander)
+            st.subheader(f"📡 Sonda: {sonda} ({len(df_sonda)} registros)")
+
+            columnas_finales = [c for c in columnas_mostrar if c in df_sonda.columns]
+
+            st.dataframe(
+                df_sonda[columnas_finales],
+                use_container_width=True,
+                height=350,  # 👈 altura fija con scroll
+            )
+
+            st.markdown("---")  # separador visual entre tablas
 
 
 # ===========================================================
@@ -462,6 +476,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
