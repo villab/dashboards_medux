@@ -26,6 +26,17 @@ except Exception as e:
     st.caption("❌ No se pudo cargar token o sondas desde secrets en Streamlit Cloud.")
     st.exception(e)
     st.stop()
+# ===========================================================
+# ⚙️ PARÁMETROS DE CONSULTA
+# ===========================================================
+st.sidebar.markdown("---")
+st.sidebar.header("⚙️ Parámetros de consulta")
+
+programas = st.sidebar.multiselect(
+    "Selecciona los programas",
+    ["confess-chrome", "youtube-test", "ping-test", "network", "voice-out", "cloud-download", "cloud-upload"],
+    default=["confess-chrome", "youtube-test", "ping-test", "voice-out", "cloud-download", "cloud-upload"]
+)
 
 # ===========================================================
 # ⏱️ ACTUALIZACIÓN EN TIEMPO REAL
@@ -447,6 +458,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
