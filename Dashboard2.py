@@ -369,11 +369,11 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         lon_range = df_plot["longitude"].max() - df_plot["longitude"].min()
 
         if lat_range < 0.1 and lon_range < 0.1:
-            zoom_default = 15
+            zoom_default = 10
         elif lat_range < 1 and lon_range < 1:
-            zoom_default = 14
+            zoom_default = 10
         elif lat_range < 5 and lon_range < 5:
-            zoom_default = 12
+            zoom_default = 10
         else:
             zoom_default = 10
 
@@ -461,6 +461,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
