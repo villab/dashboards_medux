@@ -330,9 +330,10 @@ if not df.empty:
             col_probe,
             col_time,
             col_isp,
-            "program",
+            "test",
             "latitude",
-            "longitude"
+            "longitude",
+            "success"
         ]
         columnas_predeterminadas = [c for c in columnas_predeterminadas if c in df_tablas.columns]
 
@@ -470,6 +471,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
