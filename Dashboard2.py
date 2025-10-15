@@ -291,7 +291,7 @@ else:
                 st.dataframe(df_sonda[columnas_finales], use_container_width=True, height=350)
 
 # ===========================================================
-# 🗺️ MAPAS POR ISP
+# 🗺️ MAPAS POR ISP (colores fijos por operador)
 # ===========================================================
 st.markdown("## 🗺️ Mapas por ISP")
 
@@ -316,8 +316,23 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
 
         zoom_global = st.sidebar.slider("🔍 Zoom general mapas", 3, 15, int(zoom_default))
 
-        isps = df_plot["isp"].unique()
+        # 🎨 Colores fijos por operador (agrega o ajusta según tus ISPs)
+        color_map = {
+            "t-mobile_us": "#E20074",    # Magenta
+            "att_us": "#00A8E0",        # Azul
+            "verizon_wireless_us": "#ff0000",     # Rojo
+            "Claro": "#D52B1E",       # Rojo intenso
+            "Movistar": "#00A9E0",    # Celeste
+            "Liberty": "#6F2DA8",     # Púrpura
+            "Kolbi": "#009739",       # Verde
+            "Dish": "#FF6600",        # Naranja
+        }
+
+        default_color = "#666666"  # Gris por si aparece un ISP no definido
+
+        isps = sorted(df_plot["isp"].unique())
         cols_per_row = 3
+
         for i in range(0, len(isps), cols_per_row):
             cols = st.columns(cols_per_row)
             for j, col in enumerate(cols):
@@ -327,18 +342,21 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
                 df_isp = df_plot[df_plot["isp"] == isp]
                 if df_isp.empty:
                     continue
+
                 centro_lat = df_isp["latitude"].iloc[-1]
                 centro_lon = df_isp["longitude"].iloc[-1]
+                color_isp = color_map.get(isp, default_color)
+
                 fig = px.scatter_mapbox(
                     df_isp,
                     lat="latitude",
                     lon="longitude",
-                    color="isp",
                     hover_name="isp",
                     hover_data=[c for c in ["city", "provider", "subtechnology", "program"] if c in df_isp.columns],
-                    color_discrete_sequence=px.colors.qualitative.Bold,
+                    color_discrete_sequence=[color_isp],
                     height=320,
                 )
+
                 fig.update_layout(
                     mapbox=dict(
                         style="carto-positron",
@@ -348,6 +366,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
                     margin={"r": 0, "t": 0, "l": 0, "b": 0},
                     showlegend=False,
                 )
+
                 with col:
                     st.markdown(f"**{isp}**", unsafe_allow_html=True)
                     st.plotly_chart(fig, use_container_width=True)
