@@ -201,26 +201,69 @@ else:
     df = st.session_state.df
 
 # ===========================================================
-# 📊 TABLA RESUMEN DE ESTADO DE SONDA
+# 📊 TABLA RESUMEN DE ESTADO DE SONDA (corregida para tz Las Vegas)
 # ===========================================================
 st.markdown("### 📡 Estado de sondas")
 
 if "df" in st.session_state and not st.session_state.df.empty:
     df_resumen = st.session_state.df.copy()
+
+    # Detectar columnas clave
     col_probe = next((c for c in ["probe", "probe_id", "probeId"] if c in df_resumen.columns), None)
-    col_time = next((c for c in ["dateStart", "timestamp", "createdAt"] if c in df_resumen.columns), None)
-    col_isp = next((c for c in ["isp", "provider"] if c in df_resumen.columns), None)
+    col_time = next((c for c in ["dateStart", "timestamp", "createdAt", "datetime"] if c in df_resumen.columns), None)
+    col_isp = next((c for c in ["isp", "provider", "network"] if c in df_resumen.columns), None)
+
     if col_probe and col_time:
-        df_resumen[col_time] = pd.to_datetime(df_resumen[col_time], errors="coerce", utc=True).dt.tz_convert(zona_local)
+        # Tomar serie como strings para inspección
+        s_dates = df_resumen[col_time].astype(str)
+
+        # Detectar si existen timestamps con sufijo UTC explícito (Z o +00:00)
+        tiene_utc_suffix = s_dates.str.contains(r'Z$|\+00:00$', regex=True).any()
+
+        if tiene_utc_suffix:
+            # Parsear como UTC y convertir a zona local Las Vegas
+            df_resumen[col_time] = pd.to_datetime(df_resumen[col_time], errors="coerce", utc=True).dt.tz_convert(zona_local)
+        else:
+            # Si no tienen sufijo UTC, puede que ya estén en formato local (porque fueron formateadas en flatten_results).
+            # Intentamos parsear; si resultan naive datetimes los localizamos directamente a zona_local.
+            parsed = pd.to_datetime(df_resumen[col_time], errors="coerce")
+            # Si la serie resultante es tz-aware, convertir; si es naive, localizar a zona_local
+            if parsed.dt.tz is None:
+                # Localizamos (asumimos que ya están en hora Las Vegas)
+                df_resumen[col_time] = parsed.dt.tz_localize(zona_local)
+            else:
+                df_resumen[col_time] = parsed.dt.tz_convert(zona_local)
+
+        # Filtrar nulos y preparar último registro por sonda
         df_resumen = df_resumen.dropna(subset=[col_time])
         df_last = df_resumen.sort_values(by=col_time).groupby(col_probe).tail(1).reset_index(drop=True)
+
+        # Calcular estado ON/OFF en base a la hora local (Las Vegas)
         now_local = datetime.now(zona_local)
+        # Asegurarnos que col_time sea datetime tz-aware
+        df_last[col_time] = pd.to_datetime(df_last[col_time], errors="coerce")
         df_last["minutes_since"] = (now_local - df_last[col_time]).dt.total_seconds() / 60
         df_last["Estado"] = df_last["minutes_since"].apply(lambda x: "🟢 ON" if x <= 20 else "🔴 OFF")
-        df_show = df_last.rename(columns={col_probe: "Sonda", col_isp: "ISP", col_time: "Último reporte"})
-        df_show["Último reporte"] = df_show["Último reporte"].dt.strftime('%Y-%m-%d %H:%M:%S')
+
+        # Preparar tabla para mostrar
+        columnas = [col_probe, col_isp, col_time, "Estado"]
+        columnas_presentes = [c for c in columnas if c in df_last.columns]
+
+        df_show = df_last[columnas_presentes].rename(
+            columns={col_probe: "Sonda", col_isp: "ISP", col_time: "Último reporte"}
+        )
+
+        # Formatear la columna de fecha a string en formato Las Vegas
+        # Si por alguna razón 'Último reporte' ya es string, lo reparseamos silenciosamente antes de formatear
+        df_show["Último reporte"] = pd.to_datetime(df_show["Último reporte"], errors="coerce").dt.tz_convert(zona_local).dt.strftime('%Y-%m-%d %H:%M:%S')
+
+        # Ordenar: primero las activas
         df_show = df_show.sort_values(by=["Estado", "Último reporte"], ascending=[False, False])
+
         st.dataframe(df_show[["Sonda", "ISP", "Último reporte", "Estado"]], use_container_width=True, height=300)
+
+    else:
+        st.warning("⚠️ No se encontraron columnas de sonda o tiempo en los datos.")
 else:
     st.info("👈 Ejecuta la consulta para mostrar el resumen de sondas.")
 
@@ -246,3 +289,4 @@ else:
             columnas_finales = [c for c in columnas_mostrar if c in df_sonda.columns]
             with st.expander(f"📡 Sonda {sonda} ({len(df_sonda)} registros)", expanded=True):
                 st.dataframe(df_sonda[columnas_finales], use_container_width=True, height=350)
+
