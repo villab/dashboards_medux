@@ -13,47 +13,19 @@ st.set_page_config(page_title="Medux Verveba Dashboard", layout="wide")
 st.markdown("## 📊 Dashboard Verveba Mobile")
 
 # ===========================================================
-# 🔹 AUTENTICACIÓN
+# 🔐 TOKEN Y PROBES DESDE SECRETS (Streamlit Cloud)
 # ===========================================================
-st.sidebar.header("🔐 Configuración API")
+st.sidebar.caption("🔐 Configuración API (modo automático)")
 
-token_input = st.sidebar.text_input("Token Bearer", type="password")
-token_file = st.sidebar.file_uploader("O subir archivo de token (.txt)", type=["txt"])
+try:
+    token = st.secrets["token"]
+    probes = st.secrets["ids"]
 
-if token_file is not None:
-    token = token_file.read().decode().strip()
-elif token_input:
-    token = token_input.strip()
-else:
-    st.warning("⚠️ Ingresa o sube un token válido para continuar.")
+    st.sidebar.caption(f"✅ Token y {len(probes)} sondas cargadas desde secrets (seguro)")
+except Exception as e:
+    st.caption("❌ No se pudo cargar token o sondas desde secrets en Streamlit Cloud.")
+    st.exception(e)
     st.stop()
-
-# ===========================================================
-# 📄 CSV DE PROBES
-# ===========================================================
-st.sidebar.markdown("---")
-probes_file = st.sidebar.file_uploader("📄 Subir CSV de probes", type=["csv"])
-if probes_file is not None:
-    df_probes = pd.read_csv(probes_file)
-    if "probes_id" not in df_probes.columns:
-        st.error("❌ El CSV debe tener una columna llamada `probes_id`.")
-        st.stop()
-    probes = df_probes["probes_id"].dropna().tolist()
-else:
-    st.warning("⚠️ Sube un archivo CSV con la columna `probes_id`.")
-    st.stop()
-
-# ===========================================================
-# ⚙️ PARÁMETROS DE CONSULTA
-# ===========================================================
-st.sidebar.markdown("---")
-st.sidebar.header("⚙️ Parámetros de consulta")
-
-programas = st.sidebar.multiselect(
-    "Selecciona los programas",
-    ["confess-chrome", "youtube-test", "ping-test", "network", "voice-out", "cloud-download", "cloud-upload"],
-    default=["ping-test"]
-)
 
 # ===========================================================
 # ⏱️ ACTUALIZACIÓN EN TIEMPO REAL
@@ -475,6 +447,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
