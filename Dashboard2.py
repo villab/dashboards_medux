@@ -28,20 +28,6 @@ except Exception as e:
     st.stop()
 
 
-# ===========================================================
-# 📄 CSV DE PROBES
-# ===========================================================
-st.sidebar.markdown("---")
-probes_file = st.sidebar.file_uploader("📄 Subir CSV de probes", type=["csv"])
-if probes_file is not None:
-    df_probes = pd.read_csv(probes_file)
-    if "probes_id" not in df_probes.columns:
-        st.error("❌ El CSV debe tener una columna llamada `probes_id`.")
-        st.stop()
-    probes = df_probes["probes_id"].dropna().tolist()
-else:
-    st.warning("⚠️ Sube un archivo CSV con la columna `probes_id`.")
-    st.stop()
 
 # ===========================================================
 # ⚙️ PARÁMETROS DE CONSULTA
@@ -475,6 +461,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
