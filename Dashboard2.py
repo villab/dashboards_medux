@@ -40,48 +40,36 @@ programas = st.sidebar.multiselect(
     ["confess-chrome", "youtube-test", "ping-test", "network", "voice-out", "cloud-download", "cloud-upload"],
     default=["confess-chrome", "youtube-test", "ping-test", "voice-out", "cloud-download", "cloud-upload"]
 )
-# ===========================================================
-# 🌎 CONFIGURACIÓN DE ZONA HORARIA
-# ===========================================================
 import pytz
 from datetime import datetime, timedelta
 
-# Puedes ajustar aquí o tomarlo de secrets:
+# Definir zona horaria (por ejemplo, Las Vegas)
 LOCAL_TZ = pytz.timezone("US/Pacific")
 
-# Hora actual en la zona local
+# Calcular valores por defecto
 ahora_local = datetime.now(LOCAL_TZ)
-
-# Ajuste del rango de fechas inicial
-fecha_inicio_default = ahora_local - timedelta(hours=1)
 fecha_fin_default = ahora_local
+fecha_inicio_default = ahora_local - timedelta(hours=6)
 
-# Streamlit no acepta datetimes con tzinfo, así que quitamos la zona antes de mostrar
+# ⚠️ Quitar tzinfo antes de mostrarlos en Streamlit
+fecha_inicio_default_naive = fecha_inicio_default.replace(tzinfo=None)
+fecha_fin_default_naive = fecha_fin_default.replace(tzinfo=None)
+
+# Sidebar inputs
 fecha_inicio = st.sidebar.datetime_input(
     "📅 Fecha inicio",
-    value=fecha_inicio_default.replace(tzinfo=None),
+    value=fecha_inicio_default_naive,
     key="fecha_inicio"
 )
 
 fecha_fin = st.sidebar.datetime_input(
     "📅 Fecha fin",
-    value=fecha_fin_default.replace(tzinfo=None),
+    value=fecha_fin_default_naive,
     key="fecha_fin"
 )
+ts_start = LOCAL_TZ.localize(fecha_inicio).astimezone(pytz.UTC).isoformat()
+ts_end = LOCAL_TZ.localize(fecha_fin).astimezone(pytz.UTC).isoformat()
 
-
-# Convertir a UTC antes de enviar al API (API suele requerir UTC)
-ts_start = (
-    LOCAL_TZ.localize(fecha_inicio)
-    .astimezone(pytz.UTC)
-    .isoformat()
-)
-
-ts_end = (
-    LOCAL_TZ.localize(fecha_fin)
-    .astimezone(pytz.UTC)
-    .isoformat()
-)
 
 # ===========================================================
 # ⏱️ ACTUALIZACIÓN EN TIEMPO REAL
@@ -505,6 +493,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
