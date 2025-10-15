@@ -40,22 +40,24 @@ programas = st.sidebar.multiselect(
     ["confess-chrome", "youtube-test", "ping-test", "network", "voice-out", "cloud-download", "cloud-upload"],
     default=["confess-chrome", "youtube-test", "ping-test", "voice-out", "cloud-download", "cloud-upload"]
 )
+from datetime import datetime, timedelta, timezone
 import pytz
-from datetime import datetime, timedelta
 
-# Definir zona horaria (por ejemplo, Las Vegas)
+# Zona horaria local
 LOCAL_TZ = pytz.timezone("US/Pacific")
 
-# Calcular valores por defecto
-ahora_local = datetime.now(LOCAL_TZ)
+# Obtener hora actual local sin microsegundos
+ahora_local = datetime.now(LOCAL_TZ).replace(microsecond=0)
+
+# Calcular rango de 6 horas
 fecha_fin_default = ahora_local
 fecha_inicio_default = ahora_local - timedelta(hours=6)
 
-# ⚠️ Quitar tzinfo antes de mostrarlos en Streamlit
+# Convertir a "naive" (sin tzinfo) para Streamlit
 fecha_inicio_default_naive = fecha_inicio_default.replace(tzinfo=None)
 fecha_fin_default_naive = fecha_fin_default.replace(tzinfo=None)
 
-# Sidebar inputs
+# Sidebar inputs (estos no aceptan tzinfo)
 fecha_inicio = st.sidebar.datetime_input(
     "📅 Fecha inicio",
     value=fecha_inicio_default_naive,
@@ -67,9 +69,10 @@ fecha_fin = st.sidebar.datetime_input(
     value=fecha_fin_default_naive,
     key="fecha_fin"
 )
+
+# Al preparar datos para la API, reconvertimos a UTC:
 ts_start = LOCAL_TZ.localize(fecha_inicio).astimezone(pytz.UTC).isoformat()
 ts_end = LOCAL_TZ.localize(fecha_fin).astimezone(pytz.UTC).isoformat()
-
 
 # ===========================================================
 # ⏱️ ACTUALIZACIÓN EN TIEMPO REAL
@@ -493,6 +496,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
