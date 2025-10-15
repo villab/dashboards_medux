@@ -293,7 +293,7 @@ else:
 # ===========================================================
 # 🗺️ MAPAS POR ISP (colores fijos por operador)
 # ===========================================================
-st.markdown("## 🗺️ Mapas por ISP")
+st.markdown("### 🗺️ Mapas por ISP")
 
 if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"]):
     df_plot = df.copy()
@@ -374,5 +374,6 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
