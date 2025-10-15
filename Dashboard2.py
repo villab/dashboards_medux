@@ -21,9 +21,9 @@ try:
     token = st.secrets["token"]
     probes = st.secrets["ids"]
 
-    st.sidebar.success(f"✅ Token y {len(probes)} sondas cargadas desde secrets (seguro)")
+    st.sidebar.caption(f"✅ Token y {len(probes)} sondas cargadas desde secrets (seguro)")
 except Exception as e:
-    st.error("❌ No se pudo cargar token o sondas desde secrets en Streamlit Cloud.")
+    st.caption("❌ No se pudo cargar token o sondas desde secrets en Streamlit Cloud.")
     st.exception(e)
     st.stop()
 
@@ -461,6 +461,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
