@@ -13,20 +13,20 @@ st.set_page_config(page_title="Medux Verveba Dashboard", layout="wide")
 st.markdown("## 📊 Dashboard Verveba Mobile")
 
 # ===========================================================
-# 🔹 AUTENTICACIÓN
+# 🔐 TOKEN Y PROBES DESDE SECRETS (Streamlit Cloud)
 # ===========================================================
-st.sidebar.header("🔐 Configuración API")
+st.sidebar.header("🔐 Configuración API (modo automático)")
 
-token_input = st.sidebar.text_input("Token Bearer", type="password")
-token_file = st.sidebar.file_uploader("O subir archivo de token (.txt)", type=["txt"])
+try:
+    token = st.secrets["token"]
+    probes = st.secrets["ids"]
 
-if token_file is not None:
-    token = token_file.read().decode().strip()
-elif token_input:
-    token = token_input.strip()
-else:
-    st.warning("⚠️ Ingresa o sube un token válido para continuar.")
+    st.sidebar.success(f"✅ Token y {len(probes)} sondas cargadas desde secrets (seguro)")
+except Exception as e:
+    st.error("❌ No se pudo cargar token o sondas desde secrets en Streamlit Cloud.")
+    st.exception(e)
     st.stop()
+
 
 # ===========================================================
 # 📄 CSV DE PROBES
@@ -475,6 +475,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
