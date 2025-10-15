@@ -203,7 +203,7 @@ else:
 # ===========================================================
 # 📊 TABLA RESUMEN DE ESTADO DE SONDA (corregida para tz Las Vegas)
 # ===========================================================
-st.markdown("###📡 Estado de sondas")
+st.markdown("### 📡 Estado de sondas")
 
 if "df" in st.session_state and not st.session_state.df.empty:
     df_resumen = st.session_state.df.copy()
@@ -407,6 +407,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
