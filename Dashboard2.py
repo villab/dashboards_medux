@@ -10,7 +10,7 @@ from streamlit_autorefresh import st_autorefresh
 # 🧠 CONFIGURACIÓN INICIAL
 # ===========================================================
 st.set_page_config(page_title="Medux Verveba Dashboard", layout="wide")
-st.markdown("## 📊 Dashboard Verveba Mobile")
+st.markdown("### 📊 Dashboard Verveba Mobile")
 
 # ===========================================================
 # 🔐 TOKEN Y PROBES DESDE SECRETS
@@ -203,7 +203,7 @@ else:
 # ===========================================================
 # 📊 TABLA RESUMEN DE ESTADO DE SONDA (corregida para tz Las Vegas)
 # ===========================================================
-st.markdown("### 📡 Estado de sondas")
+st.markdown("####📡 Estado de sondas")
 
 if "df" in st.session_state and not st.session_state.df.empty:
     df_resumen = st.session_state.df.copy()
@@ -270,7 +270,7 @@ else:
 # ===========================================================
 # 📋 TABLAS POR SONDA
 # ===========================================================
-st.markdown("### 📋 Resultados por Sonda")
+st.markdown("#### 📋 Resultados por Sonda")
 
 if df.empty:
     st.warning("⚠️ Aún no hay datos cargados. Usa el botón 'Consultar API'.")
@@ -296,7 +296,7 @@ else:
 # ===========================================================
 # 🗺️ MAPAS POR ISP (colores fijos por operador)
 # ===========================================================
-st.markdown("### 🗺️ Mapas por ISP")
+st.markdown("#### 🗺️ Mapas por ISP")
 
 if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"]):
     df_plot = df.copy()
@@ -377,6 +377,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
