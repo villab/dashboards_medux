@@ -315,7 +315,7 @@ else:
             columnas_finales = [c for c in columnas_mostrar if c in df_sonda.columns]
 
             # --- Acordeón abierto por defecto
-            with st.expander(f"📡 Sonda {sonda} ({len(df_sonda)} registros)", expanded=True):
+            with st.expander(f"📡 Sonda {sonda} {isp} ({len(df_sonda)} registros)", expanded=False):
                 st.dataframe(
                     df_sonda[columnas_finales],
                     use_container_width=True,
@@ -408,6 +408,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
