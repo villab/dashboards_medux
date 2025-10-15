@@ -40,6 +40,46 @@ programas = st.sidebar.multiselect(
     ["confess-chrome", "youtube-test", "ping-test", "network", "voice-out", "cloud-download", "cloud-upload"],
     default=["confess-chrome", "youtube-test", "ping-test", "voice-out", "cloud-download", "cloud-upload"]
 )
+# ===========================================================
+# 🌎 CONFIGURACIÓN DE ZONA HORARIA
+# ===========================================================
+import pytz
+from datetime import datetime, timedelta
+
+# Puedes ajustar aquí o tomarlo de secrets:
+LOCAL_TZ = pytz.timezone("US/Pacific")
+
+# Hora actual en la zona local
+ahora_local = datetime.now(LOCAL_TZ)
+
+# Ajuste del rango de fechas inicial
+fecha_inicio_default = ahora_local - timedelta(hours=1)
+fecha_fin_default = ahora_local
+
+fecha_inicio = st.sidebar.datetime_input(
+    "📅 Fecha inicio",
+    value=fecha_inicio_default,
+    key="fecha_inicio"
+)
+
+fecha_fin = st.sidebar.datetime_input(
+    "📅 Fecha fin",
+    value=fecha_fin_default,
+    key="fecha_fin"
+)
+
+# Convertir a UTC antes de enviar al API (API suele requerir UTC)
+ts_start = (
+    LOCAL_TZ.localize(fecha_inicio)
+    .astimezone(pytz.UTC)
+    .isoformat()
+)
+
+ts_end = (
+    LOCAL_TZ.localize(fecha_fin)
+    .astimezone(pytz.UTC)
+    .isoformat()
+)
 
 # ===========================================================
 # ⏱️ ACTUALIZACIÓN EN TIEMPO REAL
@@ -51,7 +91,9 @@ refresh_seconds = st.sidebar.slider("Frecuencia de refresco (segundos)", 10, 300
 usar_real_time = st.sidebar.checkbox("Activar modo realtime (últimas 6 h)", value=True)
 
 if usar_real_time:
-    st_autorefresh(interval=refresh_seconds * 1000, key="real_time_refresh")
+    ahora_local = datetime.now(LOCAL_TZ)
+    ts_end = ahora_local.astimezone(pytz.UTC).isoformat()
+    ts_start = (ahora_local - timedelta(minutes=5)).astimezone(pytz.UTC).isoformat()
 
 # ===========================================================
 # 📅 RANGO MANUAL DE FECHAS
@@ -461,6 +503,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
