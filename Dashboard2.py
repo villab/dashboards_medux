@@ -40,6 +40,7 @@ programas = st.sidebar.multiselect(
     ["confess-chrome", "youtube-test", "ping-test", "network", "voice-out", "cloud-download", "cloud-upload"],
     default=["confess-chrome", "youtube-test", "ping-test", "voice-out", "cloud-download", "cloud-upload"]
 )
+
 from datetime import datetime, timedelta, timezone
 import pytz
 
@@ -496,6 +497,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
