@@ -15,7 +15,7 @@ st.markdown("## 📊 Dashboard Verveba Mobile")
 # ===========================================================
 # 🔐 TOKEN Y PROBES DESDE SECRETS (Streamlit Cloud)
 # ===========================================================
-st.sidebar.header("🔐 Configuración API (modo automático)")
+st.sidebar.caption("🔐 Configuración API (modo automático)")
 
 try:
     token = st.secrets["token"]
@@ -461,6 +461,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
