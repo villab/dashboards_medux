@@ -9,8 +9,8 @@ from streamlit_autorefresh import st_autorefresh
 # ===========================================================
 # 🧠 CONFIGURACIÓN INICIAL
 # ===========================================================
-st.set_page_config(page_title="Medux RAW Dashboard", layout="wide")
-st.title("📊 Dashboard de Datos RAW – Medux API")
+st.set_page_config(page_title="Medux Verveba Dashboard", layout="wide")
+st.title("📊 Dashboard Verveba Mobile")
 
 # ===========================================================
 # 🔹 AUTENTICACIÓN
@@ -457,6 +457,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
