@@ -275,20 +275,44 @@ st.markdown("### 📋 Resultados por Sonda")
 if df.empty:
     st.warning("⚠️ Aún no hay datos cargados. Usa el botón 'Consultar API'.")
 else:
+    # -------------------------------------------------------
+    # 🎛️ Botón global abrir/cerrar todas las tablas
+    # -------------------------------------------------------
+    if "expandir_todo" not in st.session_state:
+        st.session_state.expandir_todo = True  # Por defecto: abiertas
+
+    col1, col2 = st.columns([1, 5])
+    with col1:
+        accion = "🔽 Cerrar todas" if st.session_state.expandir_todo else "▶️ Abrir todas"
+        if st.button(accion):
+            st.session_state.expandir_todo = not st.session_state.expandir_todo
+
+    # -------------------------------------------------------
+    # 📊 Configuración de columnas
+    # -------------------------------------------------------
     columnas_fijas = ["probeId", "isp", "dateStart", "test", "latitude", "longitude", "success"]
     columnas_extra = [c for c in df.columns if c not in columnas_fijas]
     columnas_adicionales = st.multiselect("Columnas adicionales", options=columnas_extra, default=[])
     columnas_mostrar = columnas_fijas + columnas_adicionales
+
     col_probe = next((c for c in ["probe", "probe_id", "probeId"] if c in df.columns), None)
+
     if col_probe:
         for sonda in sorted(df[col_probe].dropna().unique()):
             df_sonda = df[df[col_probe] == sonda].copy()
+
             if "dateStart" in df_sonda.columns:
                 df_sonda["dateStart"] = pd.to_datetime(df_sonda["dateStart"], errors="coerce")
                 df_sonda = df_sonda.sort_values("dateStart", ascending=False)
+
             columnas_finales = [c for c in columnas_mostrar if c in df_sonda.columns]
-            with st.expander(f"📡 Sonda {sonda} ({len(df_sonda)} registros)", expanded=True):
+
+            # -------------------------------------------------------
+            # 📡 Tabla de cada sonda con estado de expansión global
+            # -------------------------------------------------------
+            with st.expander(f"📡 Sonda {sonda} ({len(df_sonda)} registros)", expanded=st.session_state.expandir_todo):
                 st.dataframe(df_sonda[columnas_finales], use_container_width=True, height=350)
+
 
 # ===========================================================
 # 🗺️ MAPAS POR ISP (colores fijos por operador)
@@ -374,6 +398,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
