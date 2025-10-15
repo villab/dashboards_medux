@@ -38,7 +38,7 @@ st.sidebar.header("⚙️ Parámetros de consulta")
 programas = st.sidebar.multiselect(
     "Selecciona los programas",
     ["confess-chrome", "youtube-test", "ping-test", "network", "voice-out", "cloud-download", "cloud-upload"],
-    default=["ping-test"]
+    default=["confess-chrome", "youtube-test", "ping-test", "voice-out", "cloud-download", "cloud-upload"]
 )
 
 # ===========================================================
@@ -461,6 +461,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
