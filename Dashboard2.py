@@ -48,7 +48,7 @@ st.sidebar.markdown("---")
 st.sidebar.header("⏱️ Actualización automática")
 
 refresh_seconds = st.sidebar.slider("Frecuencia de refresco (segundos)", 10, 300, 30)
-usar_real_time = st.sidebar.checkbox("Activar modo realtime (últimas 6 h)", value=False)
+usar_real_time = st.sidebar.checkbox("Activar modo realtime (últimas 6 h)", value=True)
 
 if usar_real_time:
     st_autorefresh(interval=refresh_seconds * 1000, key="real_time_refresh")
@@ -461,6 +461,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
