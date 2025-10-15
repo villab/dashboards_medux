@@ -286,7 +286,6 @@ else:
     columnas_extra = [c for c in df.columns if c not in columnas_fijas]
 
     # --- 🔹 Selector de columnas adicionales
-   
     columnas_adicionales = st.multiselect(
         "Columnas adicionales",
         options=columnas_extra,
@@ -299,6 +298,10 @@ else:
 
     # --- 🔹 Detectar nombre de columna de sonda
     col_probe = next((c for c in ["probe", "probe_id", "probeId", "probes_id"] if c in df.columns), None)
+
+    # ✅ Detectar columna de ISP
+    col_isp = next((c for c in ["isp", "provider", "network"] if c in df.columns), None)
+
     if not col_probe:
         st.error("❌ No se encontró columna de sonda ('probeId' o similar).")
     else:
@@ -306,6 +309,9 @@ else:
 
         for sonda in sondas:
             df_sonda = df[df[col_probe] == sonda].copy()
+
+            # ✅ Obtener el ISP de la sonda actual (si existe)
+            isp_label = df_sonda[col_isp].iloc[0] if col_isp and col_isp in df_sonda.columns and not df_sonda.empty else "N/A"
 
             # Ordenar por fecha si existe
             if "dateStart" in df_sonda.columns:
@@ -315,13 +321,12 @@ else:
             columnas_finales = [c for c in columnas_mostrar if c in df_sonda.columns]
 
             # --- Acordeón abierto por defecto
-            with st.expander(f"📡 Sonda {sonda} ({len(df_sonda)} registros)", expanded=False):
+            with st.expander(f"📡 Sonda {sonda} | ISP: {isp_label} ({len(df_sonda)} registros)", expanded=False):
                 st.dataframe(
                     df_sonda[columnas_finales],
                     use_container_width=True,
                     height=350,
                 )
-
 
 
 # ===========================================================
@@ -408,6 +413,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
