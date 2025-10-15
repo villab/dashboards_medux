@@ -325,7 +325,7 @@ if not df.empty:
     if col_probe and col_time:
         df_tablas["_parsed_time"] = pd.to_datetime(df_tablas[col_time], errors="coerce", utc=True)
 
-        columnas_predeterminadas = [c for c in [col_probe, col_time, col_isp, "program", "latitude", "longitude"] if c in df_tablas.columns]
+        columnas_predeterminadas = [c for c in [col_probe, col_time, col_isp, "test", "success", "latitude", "longitude"] if c in df_tablas.columns]
         columnas_extra = st.sidebar.multiselect(
             "📋 Columnas adicionales a mostrar",
             options=[c for c in df_tablas.columns if c not in columnas_predeterminadas + ["_parsed_time"]],
@@ -457,6 +457,7 @@ if not df.empty:
         st.warning("⚠️ No hay suficientes columnas numéricas.")
 else:
     st.info("👈 Consulta primero la API para visualizar la gráfica.")
+
 
 
 
