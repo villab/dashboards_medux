@@ -113,12 +113,15 @@ def obtener_datos_pag(url, headers, body):
     todos_los_resultados = {}
     pagina = 1
     total = 0
+    payload = body.copy()  # ✅ evita modificar el original
+
     while True:
         st.info(f"📡 Descargando página {pagina}...")
-        r = requests.post(url, headers=headers, json=body)
+        r = requests.post(url, headers=headers, json=payload)
         if r.status_code != 200:
             st.error(f"❌ Error API: {r.status_code}")
             break
+
         data = r.json()
         results = data.get("results")
         if isinstance(results, list):
@@ -129,11 +132,17 @@ def obtener_datos_pag(url, headers, body):
                 if isinstance(res, list):
                     todos_los_resultados.setdefault(prog, []).extend(res)
                     total += len(res)
+
         next_data = data.get("next_pagination_data")
         if not next_data:
             break
-        body["pagination_data"] = next_data
+
+        payload["pagination_data"] = next_data
         pagina += 1
+        if pagina > 100:  # ✅ evita loops infinitos
+            st.warning("⚠️ Se alcanzó el límite máximo de 100 páginas de paginación.")
+            break
+
     st.success(f"✅ {total:,} registros descargados en {pagina} página(s).")
     return todos_los_resultados
 
@@ -423,6 +432,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
