@@ -113,9 +113,20 @@ def obtener_datos_pag(url, headers, body):
     todos_los_resultados = {}
     pagina = 1
     total = 0
-    payload = body.copy()  # ✅ evita modificar el original
+
+    # Asegurar que se habilite la paginación
+    payload = body.copy()
+    payload["paginate"] = True
+
+    pit = None
+    search_after = None
 
     while True:
+        if pit:
+            payload["pit"] = pit
+        if search_after:
+            payload["search_after"] = search_after
+
         st.info(f"📡 Descargando página {pagina}...")
         r = requests.post(url, headers=headers, json=payload)
         if r.status_code != 200:
@@ -123,7 +134,9 @@ def obtener_datos_pag(url, headers, body):
             break
 
         data = r.json()
-        results = data.get("results")
+
+        # Extraer resultados
+        results = data.get("results", {})
         if isinstance(results, list):
             todos_los_resultados.setdefault("network", []).extend(results)
             total += len(results)
@@ -133,17 +146,22 @@ def obtener_datos_pag(url, headers, body):
                     todos_los_resultados.setdefault(prog, []).extend(res)
                     total += len(res)
 
-        next_data = data.get("next_pagination_data")
-        if not next_data:
+        st.write(f"📄 Página {pagina}: {len(results) if isinstance(results, list) else sum(len(v) for v in results.values())} registros")
+
+        # Actualizar cursores de paginación
+        pit = data.get("pit")
+        search_after = data.get("search_after")
+
+        # Si no hay más cursores, terminamos
+        if not search_after or not pit:
+            st.success(f"✅ Descarga completa: {total:,} registros en {pagina} páginas.")
             break
 
-        payload["pagination_data"] = next_data
         pagina += 1
-        if pagina > 100:  # ✅ evita loops infinitos
-            st.warning("⚠️ Se alcanzó el límite máximo de 100 páginas de paginación.")
+        if pagina > 100:  # seguridad
+            st.warning("⚠️ Se alcanzó el límite máximo de 100 páginas.")
             break
 
-    st.success(f"✅ {total:,} registros descargados en {pagina} página(s).")
     return todos_los_resultados
 
 def obtener_datos_pag_no_cache(url, headers, body):
@@ -432,6 +450,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
