@@ -203,7 +203,7 @@ else:
 # ===========================================================
 # 📊 TABLA RESUMEN DE ESTADO DE SONDA (corregida para tz Las Vegas)
 # ===========================================================
-st.subheader("📡 Estado de sondas")
+st.subheader("📡 Probes Status")
 
 
 if "df" in st.session_state and not st.session_state.df.empty:
@@ -272,7 +272,7 @@ else:
 # 📊 TABLAS POR SONDA (acordeones abiertos + columnas fijas + selector opcional)
 # ===========================================================
 
-st.markdown("### 📋 Resultados por Sonda")
+st.markdown("### 📋 Probes Results")
 
 if "df" not in st.session_state or st.session_state.df.empty:
     st.warning("⚠️ Aún no hay datos cargados. Usa el botón 'Consultar API'.")
@@ -342,7 +342,7 @@ else:
 # ===========================================================
 # 🗺️ MAPAS POR ISP (colores fijos por operador)
 # ===========================================================
-st.markdown("#### 🗺️ Mapas por ISP")
+st.markdown("#### 🗺️ Samples Map by ISP")
 
 if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"]):
     df_plot = df.copy()
@@ -423,6 +423,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
