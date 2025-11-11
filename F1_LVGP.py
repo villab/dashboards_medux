@@ -326,7 +326,7 @@ else:
                     df_grupo = df_grupo[["Estado", "Sonda", "ISP", "Último reporte"]].reset_index(drop=True)
             
                 with (col1 if idx == 0 else col2):
-                    st.markdown(f"#### 🎒 {nombre_vis} ({len(df_grupo)} sondas)")
+                    st.markdown(f"#### 🎒 {nombre_vis} ({len(df_grupo)} Probes)")
                     if df_grupo.empty:
                         st.info(f"ℹ️ No hay datos para **{nombre_vis}**.")
                     else:
@@ -496,6 +496,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
