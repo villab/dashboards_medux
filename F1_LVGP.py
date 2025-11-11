@@ -288,19 +288,34 @@ else:
             df_last_present = df_last[columnas_presentes].rename(
                 columns={col_probe: "Sonda", col_isp: "ISP", col_time: "Último reporte"}
             )
+
+            # --- Normalizar y convertir zona horaria ---
             df_last_present["Último reporte"] = pd.to_datetime(df_last_present["Último reporte"], errors="coerce")
             if df_last_present["Último reporte"].dt.tz is None:
                 df_last_present["Último reporte"] = df_last_present["Último reporte"].dt.tz_localize(zona_local)
             df_last_present["Último reporte"] = df_last_present["Último reporte"].dt.tz_convert(zona_local).dt.strftime('%Y-%m-%d %H:%M:%S')
 
+            # --- Mapa de equivalencias ISP ---
+            isp_map = {
+                "att_us": "AT&T",
+                "t-mobile_us": "T-Mobile",
+                "verizon_wireless_us": "Verizon",
+            
+            }
+
+            df_last_present["ISP"] = df_last_present["ISP"].replace(isp_map)
+
             # --- Crear dos columnas para mostrar tablas lado a lado ---
             col1, col2 = st.columns(2)
-            grupos_orden = list(grupos.items())[:2]  # tomar solo Backpack_1 y Backpack_2
+            grupos_orden = list(grupos.items())[:2]  # Backpack_1 y Backpack_2
 
             for idx, (nombre_grupo, lista_sondas) in enumerate(grupos_orden):
                 nombre_vis = str(nombre_grupo).replace("_", " ")
                 df_grupo = df_last_present[df_last_present["Sonda"].isin(lista_sondas)].copy()
                 df_grupo = df_grupo.sort_values(by=["Estado", "Último reporte"], ascending=[False, False])
+
+                # Resetear índice (para eliminar numeración)
+                df_grupo = df_grupo.reset_index(drop=True)
 
                 with (col1 if idx == 0 else col2):
                     st.markdown(f"#### 🎒 {nombre_vis} ({len(df_grupo)} sondas)")
@@ -308,10 +323,11 @@ else:
                         st.info(f"ℹ️ No hay datos para **{nombre_vis}**.")
                     else:
                         st.dataframe(
-                            df_grupo[["Sonda", "ISP", "Último reporte", "Estado"]],
+                            df_grupo[["Estado", "Sonda", "ISP", "Último reporte"]],
                             use_container_width=True,
                             height=320,
                         )
+
 
 
 # ===========================================================
@@ -469,6 +485,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
