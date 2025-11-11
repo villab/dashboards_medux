@@ -339,11 +339,17 @@ else:
                     if df_grupo.empty:
                         st.info(f"ℹ️ No hay datos disponibles para **{nombre_vis}**.")
                     else:
+                        num_filas = len(df_grupo)
+                        # Ajustar altura de acuerdo a la cantidad de filas (cada fila ≈ 35 px, margen mínimo 150 px)
+                        altura_tabla = max(150, num_filas * 35)
+                        
                         st.dataframe(
                             df_grupo[["Estado", "Sonda", "ISP", "Último reporte"]],
                             use_container_width=True,
                             hide_index=True,
-                            height=320,
+                            height=altura_tabla,
+                        )
+
                         )
 
 
@@ -505,6 +511,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
