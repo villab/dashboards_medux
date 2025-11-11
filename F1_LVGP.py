@@ -318,21 +318,23 @@ else:
             for idx, (nombre_grupo, lista_sondas) in enumerate(grupos_orden):
                 nombre_vis = str(nombre_grupo).replace("_", " ")
             
-                # 🔹 Limitar las sondas del grupo solo a las que tienen datos en df_last_present
-                sondas_con_datos = [s for s in lista_sondas if s in df_last_present["Sonda"].values]
-            
+                # 🔹 Filtrar solo sondas con datos reales presentes en df_last_present
+                sondas_con_datos = [s for s in lista_sondas if s in df_last_present["Sonda"].unique()]
                 df_grupo = df_last_present[df_last_present["Sonda"].isin(sondas_con_datos)].copy()
+            
+                # 🔹 Eliminar cualquier fila vacía o sin reporte válido
+                df_grupo = df_grupo.dropna(subset=["Sonda", "Último reporte"]).copy()
+            
+                # 🔹 Ordenar (ON primero)
                 df_grupo = df_grupo.sort_values(by=["Estado", "Último reporte"], ascending=[False, False])
             
+                # 🔹 Limitar a las sondas que efectivamente están en el grupo y tienen data
                 if df_grupo.empty:
                     df_grupo = pd.DataFrame(columns=["Estado", "Sonda", "ISP", "Último reporte"])
                 else:
-                    df_grupo = (
-                        df_grupo[["Estado", "Sonda", "ISP", "Último reporte"]]
-                        .reset_index(drop=True)
-                        .copy()
-                    )
+                    df_grupo = df_grupo[["Estado", "Sonda", "ISP", "Último reporte"]].reset_index(drop=True)
             
+                # 🔹 Mostrar tabla en su columna correspondiente
                 with (col1 if idx == 0 else col2):
                     st.markdown(f"#### 🎒 {nombre_vis} ({len(df_grupo)} Probes)")
                     if df_grupo.empty:
@@ -341,10 +343,10 @@ else:
                         st.dataframe(
                             df_grupo,
                             use_container_width=True,
-                            hide_index=True,
+                            hide_index=True,  # sin columna sin cabecera
                             height=320,
                         )
-            
+      
 
 
 
@@ -504,6 +506,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
