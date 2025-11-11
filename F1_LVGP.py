@@ -318,35 +318,34 @@ else:
             for idx, (nombre_grupo, lista_sondas) in enumerate(grupos_orden):
                 nombre_vis = str(nombre_grupo).replace("_", " ")
             
-                # 🔹 Filtrar solo sondas con datos reales presentes en df_last_present
-                sondas_con_datos = [s for s in lista_sondas if s in df_last_present["Sonda"].unique()]
-                df_grupo = df_last_present[df_last_present["Sonda"].isin(sondas_con_datos)].copy()
+                # 🔹 Filtrar solo sondas que realmente tienen datos en df_last_present
+                sondas_presentes = df_last_present["Sonda"].unique().tolist()
+                sondas_con_datos = [s for s in lista_sondas if s in sondas_presentes]
             
-                # 🔹 Eliminar cualquier fila vacía o sin reporte válido
-                df_grupo = df_grupo.dropna(subset=["Sonda", "Último reporte"]).copy()
+                df_grupo = (
+                    df_last_present[df_last_present["Sonda"].isin(sondas_con_datos)]
+                    .dropna(subset=["Sonda", "Último reporte"])
+                    .copy()
+                )
             
-                # 🔹 Ordenar (ON primero)
-                df_grupo = df_grupo.sort_values(by=["Estado", "Último reporte"], ascending=[False, False])
+                # 🔹 Eliminar filas vacías o con columnas sin valor visible
+                df_grupo = df_grupo[df_grupo["Sonda"].notna() & (df_grupo["Sonda"] != "")]
+                df_grupo = df_grupo[df_grupo["Estado"].notna() & (df_grupo["Estado"] != "")]
+                df_grupo = df_grupo.reset_index(drop=True)
             
-                # 🔹 Limitar a las sondas que efectivamente están en el grupo y tienen data
-                if df_grupo.empty:
-                    df_grupo = pd.DataFrame(columns=["Estado", "Sonda", "ISP", "Último reporte"])
-                else:
-                    df_grupo = df_grupo[["Estado", "Sonda", "ISP", "Último reporte"]].reset_index(drop=True)
-            
-                # 🔹 Mostrar tabla en su columna correspondiente
+                # 🔹 Mostrar tabla en columna correspondiente
                 with (col1 if idx == 0 else col2):
-                    st.markdown(f"#### 🎒 {nombre_vis} ({len(df_grupo)} Probes)")
+                    st.markdown(f"#### 🎒 {nombre_vis} ({len(df_grupo)} sondas activas)")
                     if df_grupo.empty:
-                        st.info(f"ℹ️ No hay datos para **{nombre_vis}**.")
+                        st.info(f"ℹ️ No hay datos disponibles para **{nombre_vis}**.")
                     else:
                         st.dataframe(
-                            df_grupo,
+                            df_grupo[["Estado", "Sonda", "ISP", "Último reporte"]],
                             use_container_width=True,
-                            hide_index=True,  # sin columna sin cabecera
+                            hide_index=True,
                             height=320,
                         )
-      
+
 
 
 
@@ -506,6 +505,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
