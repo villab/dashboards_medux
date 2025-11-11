@@ -313,20 +313,22 @@ else:
                 nombre_vis = str(nombre_grupo).replace("_", " ")
                 df_grupo = df_last_present[df_last_present["Sonda"].isin(lista_sondas)].copy()
                 df_grupo = df_grupo.sort_values(by=["Estado", "Último reporte"], ascending=[False, False])
-
-                # Resetear índice (para eliminar numeración)
+            
+                # Resetear índice y ocultarlo
                 df_grupo = df_grupo.reset_index(drop=True)
-
+            
                 with (col1 if idx == 0 else col2):
                     st.markdown(f"#### 🎒 {nombre_vis} ({len(df_grupo)} sondas)")
                     if df_grupo.empty:
                         st.info(f"ℹ️ No hay datos para **{nombre_vis}**.")
                     else:
+                        # Ocultar completamente la columna de índice
                         st.dataframe(
-                            df_grupo[["Estado", "Sonda", "ISP", "Último reporte"]],
+                            df_grupo[["Estado", "Sonda", "ISP", "Último reporte"]].style.hide(axis="index"),
                             use_container_width=True,
                             height=320,
                         )
+
 
 
 
@@ -485,6 +487,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
