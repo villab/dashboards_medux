@@ -223,9 +223,15 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
         st.warning("⚠️ No se recibieron datos.")
         st.stop()
     st.session_state.df = df
-    st.success(f"✅ Datos cargados correctamente ({len(df)} filas).")
+
+    # 👇 Mensaje pequeño y discreto
+    st.markdown(
+        f"<span style='font-size:0.9em; color:gray;'>✅ Datos cargados correctamente ({len(df):,} filas)</span>",
+        unsafe_allow_html=True
+    )
 else:
     df = st.session_state.df
+
 
 # ===========================================================
 # 📡 Probes Status dividido por Backpack (zona horaria Las Vegas, tablas lado a lado)
@@ -490,6 +496,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
