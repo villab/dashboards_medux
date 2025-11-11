@@ -228,11 +228,10 @@ else:
     df = st.session_state.df
 
 # ===========================================================
-# 📡 Probes Status dividido por Backpack (preserva zona horaria)
+# 📡 Probes Status dividido por Backpack (zona horaria Las Vegas, tablas lado a lado)
 # ===========================================================
 st.subheader("📡 Probes Status")
 
-# usar el dataframe guardado en session_state
 if "df" not in st.session_state or st.session_state.df.empty:
     st.info("👈 Ejecuta la consulta para mostrar el resumen de sondas.")
 else:
@@ -246,92 +245,73 @@ else:
     if not (col_probe and col_time):
         st.warning("⚠️ No se encontraron columnas de sonda o tiempo en los datos.")
     else:
-        # cargar grupos desde secrets: soporta dos opciones:
-        # 1) st.secrets["grupos_sondas"] con claves (ej: Backpack_1, Backpack_2)
-        # 2) directamente keys Backpack_1 / Backpack_2 en top-level secrets
+        # --- Cargar grupos desde secrets ---
         secretos = st.secrets if hasattr(st, "secrets") else {}
         grupos = {}
-
-        # prioridad: sección 'grupos_sondas' si existe
-        if isinstance(secretos.get("grupos_sondas"), dict) and secretos.get("grupos_sondas"):
+        if isinstance(secretos.get("grupos_sondas"), dict):
             grupos = secretos.get("grupos_sondas")
         else:
-            # fallback: buscar Backpack_1 / Backpack_2 directamente
             if secretos.get("Backpack_1"):
                 grupos["Backpack_1"] = secretos.get("Backpack_1")
             if secretos.get("Backpack_2"):
                 grupos["Backpack_2"] = secretos.get("Backpack_2")
 
-        # si no hay grupos definidos, avisar y salir
         if not grupos:
-            st.info("ℹ️ No se encontraron grupos (Backpack_1 / Backpack_2) en secrets. Define 'grupos_sondas' o 'Backpack_1'/'Backpack_2'.")
+            st.info("ℹ️ No se encontraron grupos (Backpack_1 / Backpack_2) en secrets.")
         else:
-            # normalizar columna de tiempo: detectar sufijo UTC o no y convertir a zona_local (Las Vegas)
+            # --- Convertir fechas a zona horaria Las Vegas ---
             s_dates = df_resumen[col_time].astype(str)
             tiene_utc_suffix = s_dates.str.contains(r'Z$|\+00:00$', regex=True).any()
 
             if tiene_utc_suffix:
-                # parsear como UTC y convertir a zona_local
                 df_resumen[col_time] = pd.to_datetime(df_resumen[col_time], errors="coerce", utc=True).dt.tz_convert(zona_local)
             else:
-                # intentar parsear; si resulta naive lo localizamos a zona_local; si tz-aware convertimos
                 parsed = pd.to_datetime(df_resumen[col_time], errors="coerce")
-                # si parsed es tz-aware (has tzinfo), convertir; si es naive, localizar a zona_local
                 if hasattr(parsed.dt, "tz") and parsed.dt.tz is None:
-                    # naive -> localizar (asumiendo que ya están en Las Vegas)
                     df_resumen[col_time] = parsed.dt.tz_localize(zona_local)
                 else:
-                    # tz-aware -> convertir
                     df_resumen[col_time] = parsed.dt.tz_convert(zona_local)
 
-            # eliminar nulos y obtener último registro por probe (por fecha)
-            df_resumen = df_resumen.dropna(subset=[col_time]).copy()
-            # aseguramos tipo datetime tz-aware
-            df_resumen[col_time] = pd.to_datetime(df_resumen[col_time], errors="coerce")
-
-            # construir df_last (último registro por sonda)
+            df_resumen = df_resumen.dropna(subset=[col_time])
             df_last = df_resumen.sort_values(by=col_time).groupby(col_probe).tail(1).reset_index(drop=True)
 
-            # calcular minutos desde último reporte (en zona_local)
+            # --- Calcular estado ON/OFF ---
             now_local = datetime.now(zona_local)
-            # si col_time no es tz-aware por alguna razón, localizarlo antes de restar
             if df_last[col_time].dt.tz is None:
                 df_last[col_time] = df_last[col_time].dt.tz_localize(zona_local)
             df_last["minutes_since"] = (now_local - df_last[col_time]).dt.total_seconds() / 60
             df_last["Estado"] = df_last["minutes_since"].apply(lambda x: "🟢 ON" if x <= 20 else "🔴 OFF")
 
-            # preparar columnas a mostrar y formateo de fecha
+            # --- Formatear tabla base ---
             columnas = [col_probe, col_isp, col_time, "Estado"]
             columnas_presentes = [c for c in columnas if c in df_last.columns]
-
-            # renombrar para presentación
             df_last_present = df_last[columnas_presentes].rename(
                 columns={col_probe: "Sonda", col_isp: "ISP", col_time: "Último reporte"}
             )
-
-            # formatear 'Último reporte' a string en zona_local (si es tz-aware)
             df_last_present["Último reporte"] = pd.to_datetime(df_last_present["Último reporte"], errors="coerce")
-            # si tz-aware convertir a zona_local y formatear; si naive, localizar y formatear
             if df_last_present["Último reporte"].dt.tz is None:
                 df_last_present["Último reporte"] = df_last_present["Último reporte"].dt.tz_localize(zona_local)
             df_last_present["Último reporte"] = df_last_present["Último reporte"].dt.tz_convert(zona_local).dt.strftime('%Y-%m-%d %H:%M:%S')
 
-            # mostrar una tabla por cada grupo definido en secrets
-            for nombre_grupo, lista_sondas in grupos.items():
-                # normalizar nombre para visual: Backpack_1 -> Backpack 1
+            # --- Crear dos columnas para mostrar tablas lado a lado ---
+            col1, col2 = st.columns(2)
+            grupos_orden = list(grupos.items())[:2]  # tomar solo Backpack_1 y Backpack_2
+
+            for idx, (nombre_grupo, lista_sondas) in enumerate(grupos_orden):
                 nombre_vis = str(nombre_grupo).replace("_", " ")
-
-                # filtrar las sondas que pertenecen al grupo
                 df_grupo = df_last_present[df_last_present["Sonda"].isin(lista_sondas)].copy()
+                df_grupo = df_grupo.sort_values(by=["Estado", "Último reporte"], ascending=[False, False])
 
-                st.markdown(f"#### 🎒 {nombre_vis} ({len(df_grupo)} sondas)")
-
-                if df_grupo.empty:
-                    st.info(f"ℹ️ No hay datos para **{nombre_vis}**.")
-                else:
-                    # ordenar para mostrar ON primero
-                    df_grupo = df_grupo.sort_values(by=["Estado", "Último reporte"], ascending=[False, False])
-                    st.dataframe(df_grupo[["Sonda", "ISP", "Último reporte", "Estado"]], use_container_width=True, height=300)
+                with (col1 if idx == 0 else col2):
+                    st.markdown(f"#### 🎒 {nombre_vis} ({len(df_grupo)} sondas)")
+                    if df_grupo.empty:
+                        st.info(f"ℹ️ No hay datos para **{nombre_vis}**.")
+                    else:
+                        st.dataframe(
+                            df_grupo[["Sonda", "ISP", "Último reporte", "Estado"]],
+                            use_container_width=True,
+                            height=320,
+                        )
 
 
 # ===========================================================
@@ -489,6 +469,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
