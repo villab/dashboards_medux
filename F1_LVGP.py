@@ -335,7 +335,7 @@ else:
             
                 # 🔹 Mostrar tabla en columna correspondiente
                 with (col1 if idx == 0 else col2):
-                    st.markdown(f"#### 🎒 {nombre_vis} ({len(df_grupo)} sondas activas)")
+                    st.markdown(f"#### 🎒 {nombre_vis} ({len(df_grupo)} active probes)")
                     if df_grupo.empty:
                         st.info(f"ℹ️ No hay datos disponibles para **{nombre_vis}**.")
                     else:
@@ -511,6 +511,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
