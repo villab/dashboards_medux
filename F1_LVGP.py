@@ -347,7 +347,7 @@ else:
                             df_grupo[["Estado", "Sonda", "ISP", "Último reporte"]],
                             use_container_width=True,
                             hide_index=True,
-                            height=altura_tabla,
+                            height=len(df_grupo) * 48 + 38,
                         
 
                         )
@@ -511,6 +511,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
