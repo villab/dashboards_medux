@@ -313,6 +313,11 @@ else:
 
             # --- Crear dos columnas para mostrar tablas lado a lado ---
             col1, col2 = st.columns(2)
+            # 🔧 Normalizar IDs de Backpacks a STRING para evitar mismatch
+            grupos = {
+                nombre: [str(x) for x in lista]
+                for nombre, lista in grupos.items()
+            }            
             grupos_orden = list(grupos.items())[:2]  # Backpack_1 y Backpack_2
 
             for idx, (nombre_grupo, lista_sondas) in enumerate(grupos_orden):
@@ -511,6 +516,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
