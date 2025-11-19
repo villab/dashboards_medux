@@ -400,36 +400,46 @@ else:
     else:
         sondas = sorted(df[col_probe].dropna().unique())
 
-        for sonda in sondas:
-            df_sonda = df[df[col_probe] == sonda].copy()
-
-            # Ordenar por fecha si existe (para asegurar que el primer registro sea el más reciente)
-            if "dateStart" in df_sonda.columns:
-                df_sonda["dateStart"] = pd.to_datetime(df_sonda["dateStart"], errors="coerce")
-                df_sonda = df_sonda.sort_values("dateStart", ascending=False)
-            else:
-                # si no hay dateStart, dejamos el orden original (pero intentamos tener algo)
-                df_sonda = df_sonda.copy()
-
-            # Obtener el ISP del registro más reciente (primer valor no-nulo tras ordenar)
-            if col_isp and col_isp in df_sonda.columns and not df_sonda.empty:
-                isp_vals = df_sonda[col_isp].dropna().astype(str)
-                if not isp_vals.empty:
-                    isp_label = isp_vals.iloc[0]   # primer valor tras ordenar desc => registro más reciente
+        # ====== AGRUPAR SONDA POR BACKPACK ======
+        grupos = {
+            "🎒 Backpack 1": st.secrets["Backpack_1"],
+            "🎒 Backpack 2": st.secrets["Backpack_2"],
+        }
+        
+        for nombre_grupo, lista_sondas in grupos.items():
+            # Crear sección principal
+            st.markdown(f"## {nombre_grupo}")
+        
+            # Filtrar solo sondas que existan en la data recibida
+            sondas_en_data = [s for s in lista_sondas if s in sondas]
+        
+            if len(sondas_en_data) == 0:
+                st.warning(f"⚠️ No hay datos para sondas de {nombre_grupo}")
+                continue
+        
+            # Crear un expander por cada sonda
+            for sonda in sondas_en_data:
+                df_sonda = df[df[col_probe] == sonda].copy()
+        
+                if "dateStart" in df_sonda.columns:
+                    df_sonda["dateStart"] = pd.to_datetime(df_sonda["dateStart"], errors="coerce")
+                    df_sonda = df_sonda.sort_values("dateStart", ascending=False)
+        
+                # Obtener ISP del registro más reciente
+                if col_isp in df_sonda.columns and not df_sonda.empty:
+                    isp_vals = df_sonda[col_isp].dropna().astype(str)
+                    isp_label = isp_vals.iloc[0] if not isp_vals.empty else "N/A"
                 else:
                     isp_label = "N/A"
-            else:
-                isp_label = "N/A"
-
-            columnas_finales = [c for c in columnas_mostrar if c in df_sonda.columns]
-
-            # --- Acordeón abierto por defecto
-            with st.expander(f"📡 Sonda {sonda} | ISP: {isp_label} ({len(df_sonda)} registros)", expanded=False):
-                st.dataframe(
-                    df_sonda[columnas_finales],
-                    use_container_width=True,
-                    height=350,
-                )
+        
+                columnas_finales = [c for c in columnas_mostrar if c in df_sonda.columns]
+        
+                with st.expander(f"📡 Sonda {sonda} | ISP: {isp_label} ({len(df_sonda)} registros)", expanded=False):
+                    st.dataframe(
+                        df_sonda[columnas_finales],
+                        use_container_width=True,
+                        height=350,
+                    )
 
 
 # ===========================================================
@@ -516,6 +526,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
