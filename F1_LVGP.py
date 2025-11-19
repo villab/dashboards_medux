@@ -408,7 +408,7 @@ else:
         
         for nombre_grupo, lista_sondas in grupos.items():
             # Crear sección principal
-            st.markdown(f"## {nombre_grupo}")
+            st.markdown(f"# {nombre_grupo}")
         
             # Filtrar solo sondas que existan en la data recibida
             sondas_en_data = [s for s in lista_sondas if s in sondas]
@@ -526,6 +526,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
