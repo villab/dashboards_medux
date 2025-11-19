@@ -19,7 +19,7 @@ st.sidebar.caption("🔐 Configuración API (modo automático)")
 try:
     token = st.secrets["token"]
     probes = st.secrets["ids"]
-    st.sidebar.caption(f"✅ Token y {len(probes)} sondas cargadas desde secrets (seguro)")
+    st.sidebar.caption(f"✅ Token y {len(probes)} probes from secrets")
 except Exception as e:
     st.caption("❌ No se pudo cargar token o sondas desde secrets.")
     st.exception(e)
@@ -29,7 +29,7 @@ except Exception as e:
 # ⚙️ PARÁMETROS DE CONSULTA
 # ===========================================================
 st.sidebar.markdown("---")
-st.sidebar.header("⚙️ Parámetros de consulta")
+st.sidebar.header("⚙️ Query")
 
 programas = st.sidebar.multiselect(
     "Selecciona los programas",
@@ -48,8 +48,8 @@ zona_local = pytz.timezone("America/Los_Angeles")
 st.sidebar.markdown("---")
 st.sidebar.header("⏱️ Actualización automática")
 
-refresh_seconds = st.sidebar.slider("Frecuencia de refresco (segundos)", 10, 300, 30)
-usar_real_time = st.sidebar.checkbox("Activar modo realtime (últimas 8 h)", value=True)
+refresh_seconds = st.sidebar.slider("refresh frequency (seconds)", 10, 300, 30)
+usar_real_time = st.sidebar.checkbox("Turn realtime mode on (last 8 h)", value=True)
 
 if usar_real_time:
     st_autorefresh(interval=refresh_seconds * 1000, key="real_time_refresh")
@@ -86,7 +86,7 @@ else:
     st.sidebar.caption("📅 Rango de tiempo definido manualmente")
 
 # Mostrar rango activo (formato Las Vegas)
-st.sidebar.markdown("### 🕒 Rango activo")
+st.sidebar.markdown("### 🕒 Active Query")
 inicio_local_str = datetime.fromtimestamp(ts_start / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
 fin_local_str = datetime.fromtimestamp(ts_end / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
 st.sidebar.write(f"Inicio (Las Vegas): {inicio_local_str}")
@@ -154,7 +154,7 @@ def obtener_datos_pag(url, headers, body):
 
         # Si no hay más cursores, terminamos
         if not search_after or not pit:
-            st.success(f"✅ Descarga completa: {total:,} registros en {pagina} páginas.")
+            st.success(f"✅ Download complete: {total:,} registros en {pagina} páginas.")
             break
 
         pagina += 1
@@ -526,6 +526,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
