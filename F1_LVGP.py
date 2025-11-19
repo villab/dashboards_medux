@@ -46,7 +46,7 @@ zona_local = pytz.timezone("America/Los_Angeles")
 # ⏱️ ACTUALIZACIÓN EN TIEMPO REAL
 # ===========================================================
 st.sidebar.markdown("---")
-st.sidebar.header("⏱️ Actualización automática")
+st.sidebar.header("⏱️ Automatic Update")
 
 refresh_seconds = st.sidebar.slider("refresh frequency (seconds)", 10, 300, 30)
 usar_real_time = st.sidebar.checkbox("Turn realtime mode on (last 8 h)", value=True)
@@ -61,7 +61,7 @@ ahora_local = datetime.now(zona_local)
 inicio_defecto_local = ahora_local - timedelta(days=1)
 
 st.sidebar.markdown("---")
-st.sidebar.header("📅 Rango de fechas")
+st.sidebar.header("📅 Date")
 
 fecha_inicio = st.sidebar.date_input("Fecha de inicio", inicio_defecto_local.date())
 hora_inicio = st.sidebar.time_input("Hora de inicio", inicio_defecto_local.time())
@@ -434,7 +434,7 @@ else:
         
                 columnas_finales = [c for c in columnas_mostrar if c in df_sonda.columns]
         
-                with st.expander(f"📡 Sonda {sonda} | ISP: {isp_label} ({len(df_sonda)} registros)", expanded=False):
+                with st.expander(f"📡 Probe {sonda} | ISP: {isp_label} ({len(df_sonda)} tests)", expanded=False):
                     st.dataframe(
                         df_sonda[columnas_finales],
                         use_container_width=True,
@@ -526,6 +526,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
