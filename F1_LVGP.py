@@ -292,7 +292,7 @@ else:
             columnas = [col_probe, col_isp, col_time, "Estado"]
             columnas_presentes = [c for c in columnas if c in df_last.columns]
             df_last_present = df_last[columnas_presentes].rename(
-                columns={col_probe: "Sonda", col_isp: "ISP", col_time: "Last report}
+                columns={col_probe: "Sonda", col_isp: "ISP", col_time: "Last report"}
             )
 
             # --- Normalizar y convertir zona horaria ---
@@ -526,6 +526,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
