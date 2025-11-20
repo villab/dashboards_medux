@@ -533,7 +533,7 @@ else:
 # ===========================================================
 # 📈 GRÁFICA ROBUSTA: SPEEDDL POR ISP (autodetecta columnas)
 # ===========================================================
-st.markdown("### 📈 Velocidad Download (speedDL) por Operador — Gráfica (robusta)")
+st.markdown("### Download Speed")
 
 df_plotline = df.copy()
 
@@ -687,5 +687,6 @@ def grafica_kpi(df, y_field, titulo):
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning(f"⚠️ No se encontró la columna '{y_field}' en el dataframe.")
+
 
 
