@@ -530,6 +530,47 @@ else:
 
 
 
+# ===========================================================
+# 📈 GRÁFICA LINEAL SPEEDDL POR ISP (AUTO-REFRESH)
+# ===========================================================
+
+st.markdown("### 📈 Velocidad Download (speedDL) por Operador")
+
+df_plotline = df.copy()
+
+# Validar columnas necesarias
+if all(col in df_plotline.columns for col in ["dateStart", "speedDL", "isp"]):
+
+    # Convertir fecha
+    df_plotline["dateStart"] = pd.to_datetime(df_plotline["dateStart"], errors="coerce")
+    df_plotline = df_plotline.dropna(subset=["dateStart", "speedDL", "isp"])
+
+    # Ordenar por fecha
+    df_plotline = df_plotline.sort_values("dateStart")
+
+    # Crear gráfico lineal
+    fig_line = px.line(
+        df_plotline,
+        x="dateStart",
+        y="speedDL",
+        color="isp",
+        markers=True,
+        title="SpeedDL vs Tiempo (por Operador)"
+    )
+
+    fig_line.update_layout(
+        xaxis_title="Fecha (dateStart)",
+        yaxis_title="SpeedDL (Mbps)",
+        legend_title="Operador",
+        height=450
+    )
+
+    st.plotly_chart(fig_line, use_container_width=True)
+
+else:
+    st.warning("⚠️ No se encontraron las columnas 'dateStart', 'speedDL' e 'isp' para generar la gráfica.")
+
+
 
 
 
