@@ -226,7 +226,7 @@ if st.sidebar.button("🚀 Consultar API") or usar_real_time:
 
     # 👇 Mensaje pequeño y discreto
     st.markdown(
-        f"<span style='font-size:0.9em; color:gray;'>✅ Datos cargados correctamente ({len(df):,} filas)</span>",
+        f"<span style='font-size:0.9em; color:gray;'> Datos cargados correctamente ({len(df):,} filas)</span>",
         unsafe_allow_html=True
     )
 else:
@@ -236,7 +236,7 @@ else:
 # ===========================================================
 # 📡 Probes Status dividido por Backpack (zona horaria Las Vegas, tablas lado a lado)
 # ===========================================================
-st.subheader("🚦 Probes Status")
+st.subheader("Probes Status")
 
 if "df" not in st.session_state or st.session_state.df.empty:
     st.info("👈 Ejecuta la consulta para mostrar el resumen de sondas.")
@@ -526,6 +526,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         st.warning("⚠️ No hay coordenadas válidas.")
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
+
 
 
 
