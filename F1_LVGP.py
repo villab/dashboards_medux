@@ -531,82 +531,128 @@ else:
 
 
 # ===========================================================
-# 📈 GRÁFICA LINEAL SPEEDDL POR ISP (AUTO-REFRESH)
+# 📈 GRÁFICA ROBUSTA: SPEEDDL POR ISP (autodetecta columnas)
 # ===========================================================
-
-st.markdown("### 📈 Velocidad Download (speedDL) por Operador")
+st.markdown("### 📈 Velocidad Download (speedDL) por Operador — Gráfica (robusta)")
 
 df_plotline = df.copy()
 
-# Validar columnas necesarias
-if all(col in df_plotline.columns for col in ["dateStart", "speedDL", "isp"]):
+# helpers para detectar columnas por variantes comunes
+def find_col(df, candidates):
+    cols = [c for c in df.columns]
+    for cand in candidates:
+        # buscar coincidencia exacta (case sensitive) primero
+        if cand in cols:
+            return cand
+    # luego buscar por coincidencia insensible a mayúsc/minúsc y por substring
+    cand_lower = [c.lower() for c in candidates]
+    for c in cols:
+        if any(sub in c.lower() for sub in cand_lower):
+            return c
+    return None
 
-    # Convertir fecha
-    df_plotline["dateStart"] = pd.to_datetime(df_plotline["dateStart"], errors="coerce")
-    df_plotline = df_plotline.dropna(subset=["dateStart", "speedDL", "isp"])
+# posibles nombres
+date_candidates = ["dateStart", "date_start", "timestamp", "createdAt", "datetime", "date"]
+speed_candidates = ["speedDL", "speedDl", "speed_dl", "download_speed", "download", "dl_speed", "speed_download", "speed"]
+isp_candidates = ["isp", "provider", "network", "operator"]
 
-    # Ordenar por fecha
-    df_plotline = df_plotline.sort_values("dateStart")
+col_date = find_col(df_plotline, date_candidates)
+col_speed = find_col(df_plotline, speed_candidates)
+col_isp = find_col(df_plotline, isp_candidates)
 
-    # Crear gráfico lineal
-    fig_line = px.line(
-        df_plotline,
-        x="dateStart",
-        y="speedDL",
-        color="isp",
-        markers=True,
-        title="SpeedDL vs Tiempo (por Operador)"
-    )
+# Si no encuentra, mostrar debug pequeño para ayudar
+if not (col_date and col_speed and col_isp):
+    st.warning("⚠️ No se detectaron automáticamente las columnas necesarias para la gráfica.")
+    st.write("Columnas detectadas:", df_plotline.columns.tolist())
+    st.write("Buscando candidatos: ", {"date": col_date, "speed": col_speed, "isp": col_isp})
+    st.info("Sugerencia: revisa los nombres exactos de las columnas arriba. A continuación intento con lo que haya encontrado (si hay).")
 
-    fig_line.update_layout(
-        xaxis_title="Fecha (dateStart)",
-        yaxis_title="SpeedDL (Mbps)",
-        legend_title="Operador",
-        height=450
-    )
+# Tratar de convertir/extraer si la columna es de tipo dict/objeto (ej: anidado)
+def extract_if_dict(col_series, key_candidates=None):
+    # si hay dicts/strings con JSON-like, intentar extraer
+    sample = col_series.dropna().head(10)
+    if sample.empty:
+        return col_series
+    first = sample.iloc[0]
+    if isinstance(first, dict):
+        # buscar key_candidates si se pasa
+        if key_candidates:
+            for k in key_candidates:
+                if any(k in d for d in sample if isinstance(d, dict)):
+                    return col_series.apply(lambda d: d.get(k) if isinstance(d, dict) else None)
+        # si no se pasa, devolver str repr
+        return col_series.apply(lambda d: d if isinstance(d, (int, float, str)) else d)
+    return col_series
 
-    st.plotly_chart(fig_line, use_container_width=True)
+# Intentar extraer valores si vienen embebidos
+if col_speed:
+    df_plotline[col_speed] = extract_if_dict(df_plotline[col_speed], key_candidates=["speedDL", "dl", "download_speed", "value"])
+if col_isp:
+    df_plotline[col_isp] = extract_if_dict(df_plotline[col_isp])
+if col_date:
+    df_plotline[col_date] = extract_if_dict(df_plotline[col_date])
 
+# Convertir fecha a datetime (intenta varias estrategias)
+if col_date:
+    try:
+        df_plotline[col_date] = pd.to_datetime(df_plotline[col_date], errors="coerce", utc=True)
+        # si ya es timezone-aware convertimos a la zona local (Las Vegas)
+        if df_plotline[col_date].dt.tz is not None:
+            df_plotline[col_date] = df_plotline[col_date].dt.tz_convert(zona_local)
+        else:
+            # si no tiene tz, localizamos a zona_local
+            df_plotline[col_date] = df_plotline[col_date].dt.tz_localize(zona_local, ambiguous="NaT", nonexistent="shift_forward")
+        # finalmente quitar tzinfo para plotting (Plotly maneja tz-aware, pero a veces conviene simplificar)
+        df_plotline[col_date] = df_plotline[col_date].dt.tz_convert(None)
+    except Exception:
+        # intento sin UTC
+        df_plotline[col_date] = pd.to_datetime(df_plotline[col_date], errors="coerce")
+
+# Convertir speed a num y normalizar a Mbps si parece kbps
+if col_speed:
+    df_plotline[col_speed] = pd.to_numeric(df_plotline[col_speed], errors="coerce")
+    # si la mediana es muy alta asumimos kbps -> convertir a Mbps
+    med = df_plotline[col_speed].median(skipna=True)
+    if pd.notna(med) and med > 200:  # si la mediana > 200, puede ser kbps o valores no razonables; ajusta umbral si quieres
+        # intentar detectar si está en kbps: si > 1000 -> kbps
+        if med > 1000:
+            df_plotline[col_speed] = df_plotline[col_speed] / 1000.0
+        else:
+            # si med entre 200 y 1000, dejamos como está pero avisamos
+            st.caption("ℹ️ Valores de speedDL medianos altos — revisa unidades (se dejó tal cual).")
+
+# Filtrar y limpiar
+if col_date and col_speed and col_isp:
+    df_plotline = df_plotline.dropna(subset=[col_date, col_speed, col_isp]).copy()
+    # ordenar por fecha
+    df_plotline = df_plotline.sort_values(by=col_date)
+    if df_plotline.empty:
+        st.warning("⚠️ Después de limpiar no quedaron filas válidas para graficar.")
+    else:
+        # Opcional: agrupar por intervalo para suavizar (descomenta si quieres)
+        # df_plotline = df_plotline.set_index(col_date).groupby("isp").resample("5T").mean().reset_index()
+
+        # Gráfico
+        fig_line = px.line(
+            df_plotline,
+            x=col_date,
+            y=col_speed,
+            color=col_isp,
+            markers=True,
+            title="SpeedDL vs Tiempo (por Operador)"
+        )
+        fig_line.update_layout(
+            xaxis_title="Fecha (dateStart)",
+            yaxis_title="SpeedDL (Mbps)",
+            legend_title="Operador",
+            height=450,
+            margin={"r": 10, "t": 40, "l": 40, "b": 20}
+        )
+        st.plotly_chart(fig_line, use_container_width=True)
+
+        # Mostrar primeras filas útiles para debugging rápido
+        st.caption("Preview (primeras 5 filas usadas para la gráfica):")
+        st.dataframe(df_plotline[[col_date, col_speed, col_isp]].head(5), height=120)
 else:
-    st.warning("⚠️ No se encontraron las columnas 'dateStart', 'speedDL' e 'isp' para generar la gráfica.")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    st.warning("⚠️ No hay suficientes columnas detectadas para dibujar la gráfica. Revisa nombres. Ejemplo de columnas disponibles:")
+    st.write(df_plotline.columns.tolist())
