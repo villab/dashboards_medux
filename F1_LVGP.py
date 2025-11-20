@@ -651,8 +651,9 @@ if col_date and col_speed and col_isp:
         st.plotly_chart(fig_line, use_container_width=True)
 
         # Mostrar primeras filas útiles para debugging rápido
-        st.caption("Preview (primeras 5 filas usadas para la gráfica):")
-        st.dataframe(df_plotline[[col_date, col_speed, col_isp]].head(5), height=120)
+        #st.caption("Preview (primeras 5 filas usadas para la gráfica):")
+        #st.dataframe(df_plotline[[col_date, col_speed, col_isp]].head(5), height=120)
 else:
     st.warning("⚠️ No hay suficientes columnas detectadas para dibujar la gráfica. Revisa nombres. Ejemplo de columnas disponibles:")
     st.write(df_plotline.columns.tolist())
+
