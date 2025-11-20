@@ -657,3 +657,35 @@ else:
     st.warning("⚠️ No hay suficientes columnas detectadas para dibujar la gráfica. Revisa nombres. Ejemplo de columnas disponibles:")
     st.write(df_plotline.columns.tolist())
 
+
+# ===========================================================
+# 📈 FUNCIÓN PARA GENERAR GRÁFICAS DE KPIs POR ISP
+# ===========================================================
+def grafica_kpi(df, y_field, titulo):
+    if all(col in df.columns for col in ["dateStart", y_field, "isp"]):
+
+        df_g = df.copy()
+        df_g["dateStart"] = pd.to_datetime(df_g["dateStart"], errors="coerce")
+        df_g = df_g.dropna(subset=["dateStart", y_field, "isp"])
+        df_g = df_g.sort_values("dateStart")
+
+        fig = px.line(
+            df_g,
+            x="dateStart",
+            y=y_field,
+            color="isp",
+            markers=True,
+            title=titulo
+        )
+
+        fig.update_layout(
+            xaxis_title="Fecha",
+            yaxis_title=y_field,
+            height=450
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning(f"⚠️ No se encontró la columna '{y_field}' en el dataframe.")
+
+
