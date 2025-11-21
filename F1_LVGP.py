@@ -560,11 +560,13 @@ def grafica_kpi(df, y_field, titulo):
     else:
         st.warning(f"⚠️ No se encontró la columna '{y_field}' en el dataframe.")
 
-grafica_kpi(df, "speedDl", "Download Speed by ISP")
+df_dl = df[df["program"] == "cloud-download"]
+grafica_kpi(df_dl, "speedDl", "📥 SpeedDL (cloud-download)")
 
 grafica_kpi(df, "speedUl", "Upload Speed by ISP")
 
 grafica_kpi(df, "avgLatency", "Average Latency by ISP")
+
 
 
 
