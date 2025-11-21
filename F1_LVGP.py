@@ -340,7 +340,7 @@ else:
             
                 # 🔹 Mostrar tabla en columna correspondiente
                 with (col1 if idx == 0 else col2):
-                    st.markdown(f"#### 🎒 {nombre_vis} ({len(df_grupo)} active probes)")
+                    st.markdown(f"#### {nombre_vis} ({len(df_grupo)} active probes)")
                     if df_grupo.empty:
                         st.info(f"ℹ️ No hay datos disponibles para **{nombre_vis}**.")
                     else:
@@ -565,6 +565,7 @@ grafica_kpi(df, "speedDl", "Download Speed by ISP")
 grafica_kpi(df, "speedUl", "Upload Speed by ISP")
 
 grafica_kpi(df, "avgLatency", "Average Latency by ISP")
+
 
 
 
