@@ -402,8 +402,8 @@ else:
 
         # ====== AGRUPAR SONDA POR BACKPACK ======
         grupos = {
-            "🎒 Backpack 1": st.secrets["Backpack_1"],
-            "🎒 Backpack 2": st.secrets["Backpack_2"],
+            "Backpack 1": st.secrets["Backpack_1"],
+            "Backpack 2": st.secrets["Backpack_2"],
         }
         
         for nombre_grupo, lista_sondas in grupos.items():
@@ -565,6 +565,7 @@ grafica_kpi(df, "speedDl", "Download Speed by ISP")
 grafica_kpi(df, "speedUl", "Upload Speed by ISP")
 
 grafica_kpi(df, "avgLatency", "Average Latency by ISP")
+
 
 
 
