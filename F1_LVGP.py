@@ -383,7 +383,7 @@ else:
     df = st.session_state.df.copy()
 
     # --- 🔹 Columnas fijas (siempre visibles)
-    columnas_fijas = ["probeId", "isp", "dateStart", "test", "latitude", "longitude", "success", "subtechnology"]  # puedes ajustar las fijas aquí
+    columnas_fijas = ["probeId", "isp", "dateStart", "test", "latitude", "longitude", "success", "subtechnology","technology"]  # puedes ajustar las fijas aquí
 
     # --- 🔹 Detectar columnas adicionales disponibles
     columnas_extra = [c for c in df.columns if c not in columnas_fijas]
@@ -578,6 +578,7 @@ grafica_kpi(df, "speedUl", "Upload Speed")
 
 df_dl = df[df["test"] == "ping-test"]
 grafica_kpi(df, "avgLatency", "Average Latency (ms)")
+
 
 
 
