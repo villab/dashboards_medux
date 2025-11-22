@@ -71,19 +71,29 @@ hora_fin = st.sidebar.time_input("Hora de fin", ahora_local.time())
 # ===========================================================
 # 🧮 CALCULAR TIMESTAMPS
 # ===========================================================
+# ===========================================================
+# 🧮 CALCULAR TIMESTAMPS (BLOQUE CORRECTO)
+# ===========================================================
 if usar_real_time:
+    # Últimas 8h, modo automático
     ts_end = int(datetime.now(pytz.utc).timestamp() * 1000)
     ts_start = int((datetime.now(pytz.utc) - timedelta(hours=8)).timestamp() * 1000)
-    st.sidebar.caption(f"🔁 Modo realtime activo (últimas 8 h, refresca cada {refresh_seconds}s)")
+
+    st.sidebar.caption(f"🔁 Realtime mode ON (last 8h, refresh {refresh_seconds}s)")
 else:
+    # Respeta exactamente las fechas y horas que el usuario selecciona
     dt_inicio_local = zona_local.localize(datetime.combine(fecha_inicio, hora_inicio))
     dt_fin_local = zona_local.localize(datetime.combine(fecha_fin, hora_fin))
+
     if dt_inicio_local >= dt_fin_local:
         st.error("⚠️ La fecha/hora de inicio no puede ser posterior o igual a la de fin.")
         st.stop()
+
     ts_start = int(dt_inicio_local.astimezone(pytz.utc).timestamp() * 1000)
     ts_end = int(dt_fin_local.astimezone(pytz.utc).timestamp() * 1000)
-    st.sidebar.caption("📅 Rango de tiempo definido manualmente")
+
+    st.sidebar.caption("📅 Manual datetime range active")
+
 
 # Mostrar rango activo (formato Las Vegas)
 st.sidebar.markdown("### 🕒 Active Query")
@@ -568,6 +578,7 @@ grafica_kpi(df, "speedUl", "Upload Speed")
 
 df_dl = df[df["test"] == "ping-test"]
 grafica_kpi(df, "avgLatency", "Average Latency (ms)")
+
 
 
 
