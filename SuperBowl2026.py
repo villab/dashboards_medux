@@ -261,7 +261,7 @@ def flatten_results(raw_json):
             except Exception:
                 pass
 
-return df
+    return df
 
     
 
