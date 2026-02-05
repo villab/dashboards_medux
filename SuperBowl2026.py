@@ -627,12 +627,16 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
     # --- Agregación cada 5 minutos por ISP ---
     df_agg = (
         df_g
-        .set_index("dateStart")
-        .groupby("isp")
-        .resample(freq)[y_field]
+        .groupby(
+            [
+                "isp",
+                pd.Grouper(key="dateStart", freq=freq)
+            ]
+        )[y_field]
         .agg(agg_func)
         .reset_index()
     )
+    
 
     # --- Plot ---
     fig = px.line(
