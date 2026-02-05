@@ -595,8 +595,8 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
         f"{y_field}: %{y:.2f}<br>"
         "<i>Aggregated every 5 minutes</i>"
         "<extra></extra>"
+        )
     )
-)
 
     # --- Línea vertical compartida + comparación entre ISPs ---
     fig.update_layout(
