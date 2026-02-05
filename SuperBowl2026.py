@@ -552,7 +552,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
 
-
+####------------------------------------------########
 ##### GRAFICA DE KPIS POR ISP
 
 def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
@@ -588,12 +588,21 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
         markers=True,
         title=titulo
     )
+    fig.update_traces(
+    hovertemplate=(
+        "<b>%{legendgroup}</b><br>"
+        "Fecha: %{x}<br>"
+        f"{y_field}: %{y:.2f}<br>"
+        "<i>Aggregated every 5 minutes</i>"
+        "<extra></extra>"
+    )
+)
 
     # --- Línea vertical compartida + comparación entre ISPs ---
     fig.update_layout(
         xaxis_title="Fecha",
         yaxis_title=y_field,
-        hovermode="x unified",   # 🔥 ESTA ES LA MAGIA
+        hovermode="x unified",  
         height=450
     )
 
