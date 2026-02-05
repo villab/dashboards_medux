@@ -592,8 +592,8 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
         hovertemplate=(
             "<b>%{legendgroup}</b><br>"
             "Fecha: %{x}<br>"
-            f"{y_field}: %{y:.2f}<br>"
-            "<i>Aggregated every 5 minutes</i>"
+            + y_field + ": %{y:.2f}<br>"
+            "<i>⏱ 5-min aggregation</i>"
             "<extra></extra>"
         )
     )
