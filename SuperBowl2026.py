@@ -24,6 +24,18 @@ except Exception as e:
     st.caption("❌ No se pudo cargar token o sondas desde secrets.")
     st.exception(e)
     st.stop()
+# ----------------------------------------------------------
+# Selector Backpacks
+#-----------------------------------------------------------
+
+st.sidebar.markdown("---")
+st.sidebar.header("Backpacks Selector")
+
+backpack_option = st.sidebar.radio(
+    "Mostrar datos de:",
+    ["Backpack 1", "Backpack 2", "Both"],
+    index=2  # Ambos por defecto
+)
 
 # ===========================================================
 # ⚙️ PARÁMETROS DE CONSULTA
@@ -231,6 +243,20 @@ def flatten_results(raw_json):
         if any(x in col.lower() for x in ["date", "time", "timestamp", "created"]):
             df[col] = pd.to_datetime(df[col], errors="coerce", utc=True).dt.tz_convert(zona_local).dt.strftime('%Y-%m-%d %H:%M:%S')
     return df
+
+def filtrar_por_backpack(df, opcion, col_probe):
+    if opcion == "Ambos":
+        return df
+
+    secretos = st.secrets
+    key = "Backpack_1" if opcion == "Backpack 1" else "Backpack_2"
+
+    if key not in secretos:
+        return df
+
+    sondas = [str(x) for x in secretos[key]]
+    return df[df[col_probe].astype(str).isin(sondas)]
+
 
 # ===========================================================
 # 🚀 CONSULTAR API
@@ -552,8 +578,8 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
 else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
 
-####------------------------------------------########
-##### GRAFICA DE KPIS POR ISP
+#------------------------------------------########
+#--------------GRAFICA DE KPIS POR ISP
 
 def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
     if not all(col in df.columns for col in ["dateStart", y_field, "isp"]):
@@ -588,6 +614,7 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
         markers=True,
         title=titulo
     )
+    #### Tool tip que indica 5min aggregation######
     fig.update_traces(
         hovertemplate=(
             "<b>%{legendgroup}</b><br>"
@@ -608,9 +635,17 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
 
     st.plotly_chart(fig, use_container_width=True)
 
+# detectar columna de sonda
+col_probe = next(
+    (c for c in ["probe", "probe_id", "probeId", "probes_id"] if c in df.columns),
+    None
+)
 
-df_dl = df[df["test"] == "cloud-download"]
+df_filtrado = filtrar_por_backpack(df, backpack_option, col_probe)
+
+df_dl = df_filtrado[df_filtrado["test"] == "cloud-download"]
 grafica_kpi(df_dl, "speedDl", "Download Speed (Mbps)")
+
 
 df_dl = df[df["test"] == "cloud-upload"]
 grafica_kpi(df, "speedUl", "Upload Speed (Mbps)")
