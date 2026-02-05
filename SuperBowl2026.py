@@ -29,10 +29,10 @@ except Exception as e:
 #-----------------------------------------------------------
 
 st.sidebar.markdown("---")
-st.sidebar.header("Backpacks Selector")
+st.sidebar.header("Backpack Selector")
 
 backpack_option = st.sidebar.radio(
-    "Mostrar datos de:",
+    "Show data from:",
     ["Backpack 1", "Backpack 2", "Both"],
     index=2  # Ambos por defecto
 )
@@ -41,10 +41,10 @@ backpack_option = st.sidebar.radio(
 # ⚙️ PARÁMETROS DE CONSULTA
 # ===========================================================
 st.sidebar.markdown("---")
-st.sidebar.header("⚙️ Query")
+st.sidebar.header("Types of tests")
 
 programas = st.sidebar.multiselect(
-    "Selecciona los programas",
+    "Select tests",
     ["confess-chrome", "youtube-test", "ping-test", "network", "voice-out", "cloud-download", "cloud-upload"],
     default=["confess-chrome", "youtube-test", "ping-test", "voice-out", "cloud-download", "cloud-upload"]
 )
@@ -615,15 +615,15 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
         title=titulo
     )
     #### Tool tip que indica 5min aggregation######
-    fig.update_traces(
-        hovertemplate=(
-            "<b>%{legendgroup}</b><br>"
-            "Fecha: %{x}<br>"
-            + y_field + ": %{y:.2f}<br>"
-            "<i>⏱ 5-min aggregation</i>"
-            "<extra></extra>"
-        )
-    )
+#    fig.update_traces(
+#        hovertemplate=(
+#            "<b>%{legendgroup}</b><br>"
+#            "Fecha: %{x}<br>"
+#            + y_field + ": %{y:.2f}<br>"
+#            "<i>⏱ 5-min aggregation</i>"
+#            "<extra></extra>"
+#        )
+#    )
 
     # --- Línea vertical compartida + comparación entre ISPs ---
     fig.update_layout(
