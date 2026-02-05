@@ -645,16 +645,14 @@ col_probe = next(
 df_kpi = filtrar_por_backpack(df, backpack_option, col_probe)
 
 
-
-df_dl = df_filtrado[df_filtrado["test"] == "cloud-download"]
+df_dl = df_kpi[df_kpi["test"] == "cloud-download"]
 grafica_kpi(df_dl, "speedDl", "Download Speed (Mbps)")
 
+df_ul = df_kpi[df_kpi["test"] == "cloud-upload"]
+grafica_kpi(df_ul, "speedUl", "Upload Speed (Mbps)")
 
-df_dl = df[df["test"] == "cloud-upload"]
-grafica_kpi(df, "speedUl", "Upload Speed (Mbps)")
-
-df_dl = df[df["test"] == "ping-test"]
-grafica_kpi(df, "avgLatency", "Average Latency (ms)")
+df_ping = df_kpi[df_kpi["test"] == "ping-test"]
+grafica_kpi(df_ping, "avgLatency", "Average Latency (ms)")
 
 
 
