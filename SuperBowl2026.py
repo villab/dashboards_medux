@@ -249,10 +249,13 @@ def flatten_results(raw_json):
     
     for col in COLUMNAS_FECHA:
         if col in df.columns:
-            df[col] = (
-                pd.to_datetime(df[col], errors="coerce", utc=True)
-                .dt.tz_convert(zona_local)
-            )
+            # ⚠️ Solo si parece timestamp real
+            if pd.api.types.is_numeric_dtype(df[col]) or df[col].astype(str).str.contains(r"\d{4}-\d{2}-\d{2}").any():
+                df[col] = (
+                    pd.to_datetime(df[col], errors="coerce", utc=True)
+                    .dt.tz_convert(zona_local)
+                )
+
     
 
 def filtrar_por_backpack(df, opcion, col_probe):
