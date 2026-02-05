@@ -586,7 +586,7 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
         y=y_field,
         color="isp",
         markers=True,
-        title=f"{titulo} ({agg_func} cada {freq})"
+        title=titulo
     )
 
     # --- Línea vertical compartida + comparación entre ISPs ---
@@ -604,7 +604,7 @@ df_dl = df[df["test"] == "cloud-download"]
 grafica_kpi(df_dl, "speedDl", "Download Speed (Mbps)")
 
 df_dl = df[df["test"] == "cloud-upload"]
-grafica_kpi(df, "speedUl", "Upload Speed")
+grafica_kpi(df, "speedUl", "Upload Speed (Mbps)")
 
 df_dl = df[df["test"] == "ping-test"]
 grafica_kpi(df, "avgLatency", "Average Latency (ms)")
