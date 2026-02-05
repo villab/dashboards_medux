@@ -247,14 +247,20 @@ def flatten_results(raw_json):
         "timestamp"
     ]
     
-    for col in COLUMNAS_FECHA:
+     for col in COLUMNAS_FECHA:
         if col in df.columns:
-            # ⚠️ Solo si parece timestamp real
-            if pd.api.types.is_numeric_dtype(df[col]) or df[col].astype(str).str.contains(r"\d{4}-\d{2}-\d{2}").any():
-                df[col] = (
-                    pd.to_datetime(df[col], errors="coerce", utc=True)
-                    .dt.tz_convert(zona_local)
-                )
+            try:
+                serie = pd.to_datetime(df[col], errors="coerce", utc=True)
+    
+                # ✅ Solo convertir si al menos el 80% son fechas válidas
+                ratio_validos = serie.notna().mean()
+    
+                if ratio_validos > 0.8:
+                    df[col] = serie.dt.tz_convert(zona_local)
+    
+            except Exception:
+                pass
+
 return df
 
     
