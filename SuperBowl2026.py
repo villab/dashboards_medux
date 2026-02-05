@@ -635,13 +635,16 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
 
     st.plotly_chart(fig, use_container_width=True)
 
-# detectar columna de sonda
+# Detectar columna de sonda
 col_probe = next(
     (c for c in ["probe", "probe_id", "probeId", "probes_id"] if c in df.columns),
     None
 )
 
-df_filtrado = filtrar_por_backpack(df, backpack_option, col_probe)
+# Filtrar dataframe según Backpack seleccionado
+df_kpi = filtrar_por_backpack(df, backpack_option, col_probe)
+
+
 
 df_dl = df_filtrado[df_filtrado["test"] == "cloud-download"]
 grafica_kpi(df_dl, "speedDl", "Download Speed (Mbps)")
