@@ -38,9 +38,24 @@ programas = st.sidebar.multiselect(
 )
 
 # ===========================================================
-# 🕒 ZONA HORARIA DE LAS VEGAS
+# 🌍 TIME ZONE (Selector)
 # ===========================================================
-zona_local = pytz.timezone("America/Los_Angeles")
+st.sidebar.markdown("---")
+st.sidebar.header("🌍 Time Zone")
+
+tz_map = {
+    "Los Angeles (PT)": "America/Los_Angeles",
+    "Dallas (CT)": "America/Chicago",
+    "UTC": "UTC",
+}
+
+tz_label = st.sidebar.selectbox(
+    "Mostrar fechas en:",
+    list(tz_map.keys()),
+    index=0  # Los Angeles por defecto
+)
+
+zona_local = pytz.timezone(tz_map[tz_label])
 
 # ===========================================================
 # ⏱️ ACTUALIZACIÓN EN TIEMPO REAL
