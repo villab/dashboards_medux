@@ -240,10 +240,20 @@ def flatten_results(raw_json):
     if "program" not in df.columns:
         df["program"] = "network"
     # 🔹 Convertir campos de fecha detectados a zona Las Vegas
-    for col in df.columns:
-        if any(x in col.lower() for x in ["date", "time", "timestamp", "created"]):
-            df[col] = pd.to_datetime(df[col], errors="coerce", utc=True).dt.tz_convert(zona_local).dt.strftime('%Y-%m-%d %H:%M:%S')
-    return df
+    COLUMNAS_FECHA = [
+        "dateStart",
+        "dateEnd",
+        "createdAt",
+        "timestamp"
+    ]
+    
+    for col in COLUMNAS_FECHA:
+        if col in df.columns:
+            df[col] = (
+                pd.to_datetime(df[col], errors="coerce", utc=True)
+                .dt.tz_convert(zona_local)
+            )
+    
 
 def filtrar_por_backpack(df, opcion, col_probe):
     if opcion == "Both":
