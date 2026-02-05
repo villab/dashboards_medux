@@ -607,24 +607,25 @@ else:
 
 def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
     if not all(col in df.columns for col in ["dateStart", y_field, "isp"]):
-        st.warning(f"⚠️ No se encontró la columna '{y_field}' en el dataframe.")
+        st.warning(f"⚠️ No se encontró la columna '{y_field}' en los datos.")
         return
 
     df_g = df.copy()
 
-    # --- Normalizar fecha ---
+    # --- Fecha ---
     df_g["dateStart"] = pd.to_datetime(df_g["dateStart"], errors="coerce")
-    df_g = df_g.dropna(subset=["dateStart", y_field, "isp"])
-    # 🔧 Forzar KPI a numérico
+
+    # --- KPI numérico ---
     df_g[y_field] = pd.to_numeric(df_g[y_field], errors="coerce")
-    
-    # Eliminar filas donde el KPI no sea numérico
-    df_g = df_g.dropna(subset=[y_field])
 
-    # --- Asegurar orden ---
-    df_g = df_g.sort_values("dateStart")
+    # --- Limpiar ---
+    df_g = df_g.dropna(subset=["dateStart", y_field, "isp"])
 
-    # --- Agregación cada 5 minutos por ISP ---
+    if df_g.empty:
+        st.info(f"ℹ️ No hay datos válidos para {titulo}")
+        return
+
+    # --- Agregación robusta ---
     df_agg = (
         df_g
         .groupby(
@@ -636,7 +637,10 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
         .agg(agg_func)
         .reset_index()
     )
-    
+
+    if df_agg.empty:
+        st.info(f"ℹ️ No hay datos agregados para {titulo}")
+        return
 
     # --- Plot ---
     fig = px.line(
@@ -647,22 +651,11 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
         markers=True,
         title=titulo
     )
-    #### Tool tip que indica 5min aggregation######
-#    fig.update_traces(
-#        hovertemplate=(
-#            "<b>%{legendgroup}</b><br>"
-#            "Fecha: %{x}<br>"
-#            + y_field + ": %{y:.2f}<br>"
-#            "<i>⏱ 5-min aggregation</i>"
-#            "<extra></extra>"
-#        )
-#    )
 
-    # --- Línea vertical compartida + comparación entre ISPs ---
     fig.update_layout(
         xaxis_title="Fecha",
         yaxis_title=y_field,
-        hovermode="x unified",  
+        hovermode="x unified",
         height=450
     )
 
