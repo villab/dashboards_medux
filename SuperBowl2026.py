@@ -264,24 +264,23 @@ def filtrar_por_backpack(df, opcion, col_probe):
 if "df" not in st.session_state:
     st.session_state.df = pd.DataFrame()
 
-if st.sidebar.button("🚀 Consultar API") or usar_real_time:
-    raw = obtener_datos_pag_no_cache(url, headers, body) if usar_real_time else obtener_datos_pag(url, headers, body)
-    if not raw:
-        st.warning("⚠️ No se recibieron datos de la API.")
-        st.stop()
+should_fetch = False
+
+if usar_real_time:
+    should_fetch = True
+elif st.sidebar.button("🚀 Consultar API"):
+    should_fetch = True
+
+if should_fetch:
+    raw = (
+        obtener_datos_pag_no_cache(url, headers, body)
+        if usar_real_time
+        else obtener_datos_pag(url, headers, body)
+    )
+
     df = flatten_results(raw)
-    if df.empty:
-        st.warning("⚠️ No se recibieron datos.")
-        st.stop()
     st.session_state.df = df
 
-    # 👇 Mensaje pequeño y discreto
-    st.markdown(
-        f"<span style='font-size:0.9em; color:gray;'> Datos cargados correctamente ({len(df):,} filas)</span>",
-        unsafe_allow_html=True
-    )
-else:
-    df = st.session_state.df
 
 
 # ===========================================================
