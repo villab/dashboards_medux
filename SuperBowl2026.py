@@ -5,6 +5,7 @@ import requests
 from datetime import datetime, timedelta, time
 import pytz
 from streamlit_autorefresh import st_autorefresh
+import time
 
 # ===========================================================
 # 🧠 CONFIGURACIÓN INICIAL
@@ -261,15 +262,23 @@ def filtrar_por_backpack(df, opcion, col_probe):
 # ===========================================================
 # 🚀 CONSULTAR API
 # ===========================================================
+
+if "last_fetch_ts" not in st.session_state:
+    st.session_state.last_fetch_ts = 0.0
+
 if "df" not in st.session_state:
     st.session_state.df = pd.DataFrame()
 
-should_fetch = False
+now = time.time()
 
-if usar_real_time:
-    should_fetch = True
-elif st.sidebar.button("🚀 Consultar API"):
-    should_fetch = True
+manual_trigger = st.sidebar.button("🚀 Consultar API")
+
+time_trigger = (
+    usar_real_time and
+    (now - st.session_state.last_fetch_ts >= refresh_seconds)
+)
+
+should_fetch = manual_trigger or time_trigger
 
 if should_fetch:
     raw = (
@@ -289,6 +298,8 @@ if should_fetch:
         st.stop()
 
     st.session_state.df = df
+    st.session_state.last_fetch_ts = now
+
 
     st.markdown(
         f"<span style='font-size:0.9em; color:gray;'> Datos cargados correctamente ({len(df):,} filas)</span>",
