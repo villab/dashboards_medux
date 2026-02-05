@@ -682,7 +682,7 @@ grafica_kpi(df_ping, "avgLatency", "Average Latency (ms)")
 #grafica_kpi(df_confess, "loadingTime", "Loading time (ms)")
 
 df_voice = df_kpi[df_kpi["test"] == "voice-out"]
-grafica_kpi(df_confess, "callSetUpTimeL3", "Tiempo establecimiento llamada (ms)")
+grafica_kpi(df_voice, "callSetUpTimeL3", "Tiempo establecimiento llamada (ms)")
 
 
 
