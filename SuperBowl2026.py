@@ -278,10 +278,24 @@ if should_fetch:
         else obtener_datos_pag(url, headers, body)
     )
 
+    if not raw:
+        st.warning("⚠️ No se recibieron datos de la API.")
+        st.stop()
+
     df = flatten_results(raw)
+
+    if df.empty:
+        st.warning("⚠️ No se recibieron datos.")
+        st.stop()
+
     st.session_state.df = df
 
-
+    st.markdown(
+        f"<span style='font-size:0.9em; color:gray;'> Datos cargados correctamente ({len(df):,} filas)</span>",
+        unsafe_allow_html=True
+    )
+else:
+    df = st.session_state.df
 
 # ===========================================================
 # 📡 Probes Status dividido por Backpack (zona horaria Las Vegas, tablas lado a lado)
