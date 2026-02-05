@@ -628,15 +628,13 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
     # --- Agregación robusta ---
     df_agg = (
         df_g
-        .groupby(
-            [
-                "isp",
-                pd.Grouper(key="dateStart", freq=freq)
-            ]
-        )[y_field]
-        .agg(agg_func)
+        .set_index("dateStart")
+        .groupby("isp")[y_field]
+        .resample(freq)
+        .mean()
         .reset_index()
     )
+
 
     if df_agg.empty:
         st.info(f"ℹ️ No hay datos agregados para {titulo}")
