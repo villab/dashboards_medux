@@ -449,6 +449,10 @@ else:
 # ===========================================================
 # 📊 TABLAS POR SONDA (acordeones abiertos + columnas fijas + selector opcional)
 # ===========================================================
+# --- 🔧 Normalizar fechas ANTES de mostrar ---
+for c in columnas_finales:
+    if pd.api.types.is_datetime64_any_dtype(df_sonda[c]):
+        df_sonda[c] = df_sonda[c].dt.strftime("%Y-%m-%d %H:%M:%S")
 
 st.markdown("### 📋 Probes Results")
 
