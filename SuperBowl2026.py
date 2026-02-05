@@ -245,7 +245,7 @@ def flatten_results(raw_json):
     return df
 
 def filtrar_por_backpack(df, opcion, col_probe):
-    if opcion == "Ambos":
+    if opcion == "Both":
         return df
 
     secretos = st.secrets
