@@ -553,37 +553,52 @@ else:
     st.info("👈 Consulta primero la API para mostrar mapas.")
 
 
+##### GRAFICA DE KPIS POR ISP
 
-
-# ===========================================================
-# 📈 FUNCIÓN PARA GENERAR GRÁFICAS DE KPIs POR ISP
-# ===========================================================
-def grafica_kpi(df, y_field, titulo):
-    if all(col in df.columns for col in ["dateStart", y_field, "isp"]):
-
-        df_g = df.copy()
-        df_g["dateStart"] = pd.to_datetime(df_g["dateStart"], errors="coerce")
-        df_g = df_g.dropna(subset=["dateStart", y_field, "isp"])
-        df_g = df_g.sort_values("dateStart")
-
-        fig = px.line(
-            df_g,
-            x="dateStart",
-            y=y_field,
-            color="isp",
-            markers=True,
-            title=titulo
-        )
-
-        fig.update_layout(
-            xaxis_title="Fecha",
-            yaxis_title=y_field,
-            height=450
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-    else:
+def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
+    if not all(col in df.columns for col in ["dateStart", y_field, "isp"]):
         st.warning(f"⚠️ No se encontró la columna '{y_field}' en el dataframe.")
+        return
+
+    df_g = df.copy()
+
+    # --- Normalizar fecha ---
+    df_g["dateStart"] = pd.to_datetime(df_g["dateStart"], errors="coerce")
+    df_g = df_g.dropna(subset=["dateStart", y_field, "isp"])
+
+    # --- Asegurar orden ---
+    df_g = df_g.sort_values("dateStart")
+
+    # --- Agregación cada 5 minutos por ISP ---
+    df_agg = (
+        df_g
+        .set_index("dateStart")
+        .groupby("isp")
+        .resample(freq)[y_field]
+        .agg(agg_func)
+        .reset_index()
+    )
+
+    # --- Plot ---
+    fig = px.line(
+        df_agg,
+        x="dateStart",
+        y=y_field,
+        color="isp",
+        markers=True,
+        title=f"{titulo} ({agg_func} cada {freq})"
+    )
+
+    # --- Línea vertical compartida + comparación entre ISPs ---
+    fig.update_layout(
+        xaxis_title="Fecha",
+        yaxis_title=y_field,
+        hovermode="x unified",   # 🔥 ESTA ES LA MAGIA
+        height=450
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
 
 df_dl = df[df["test"] == "cloud-download"]
 grafica_kpi(df_dl, "speedDl", "Download Speed (Mbps)")
