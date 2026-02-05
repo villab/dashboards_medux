@@ -615,6 +615,11 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
     # --- Normalizar fecha ---
     df_g["dateStart"] = pd.to_datetime(df_g["dateStart"], errors="coerce")
     df_g = df_g.dropna(subset=["dateStart", y_field, "isp"])
+    # 🔧 Forzar KPI a numérico
+    df_g[y_field] = pd.to_numeric(df_g[y_field], errors="coerce")
+    
+    # Eliminar filas donde el KPI no sea numérico
+    df_g = df_g.dropna(subset=[y_field])
 
     # --- Asegurar orden ---
     df_g = df_g.sort_values("dateStart")
