@@ -255,6 +255,7 @@ def flatten_results(raw_json):
                     pd.to_datetime(df[col], errors="coerce", utc=True)
                     .dt.tz_convert(zona_local)
                 )
+return df
 
     
 
