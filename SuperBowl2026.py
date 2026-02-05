@@ -589,12 +589,12 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
         title=titulo
     )
     fig.update_traces(
-    hovertemplate=(
-        "<b>%{legendgroup}</b><br>"
-        "Fecha: %{x}<br>"
-        f"{y_field}: %{y:.2f}<br>"
-        "<i>Aggregated every 5 minutes</i>"
-        "<extra></extra>"
+        hovertemplate=(
+            "<b>%{legendgroup}</b><br>"
+            "Fecha: %{x}<br>"
+            f"{y_field}: %{y:.2f}<br>"
+            "<i>Aggregated every 5 minutes</i>"
+            "<extra></extra>"
         )
     )
 
