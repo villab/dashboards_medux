@@ -510,8 +510,15 @@ else:
                 df_sonda = df[df[col_probe] == sonda].copy()
         
                 if "dateStart" in df_sonda.columns:
-                    df_sonda["dateStart"] = pd.to_datetime(df_sonda["dateStart"], errors="coerce")
+                    if not pd.api.types.is_datetime64_any_dtype(df_sonda["dateStart"]):
+                        df_sonda["dateStart"] = pd.to_datetime(
+                            df_sonda["dateStart"],
+                            errors="coerce",
+                            utc=True
+                        ).dt.tz_convert(zona_local)
+                
                     df_sonda = df_sonda.sort_values("dateStart", ascending=False)
+
         
                 # Obtener ISP del registro más reciente
                 if col_isp in df_sonda.columns and not df_sonda.empty:
