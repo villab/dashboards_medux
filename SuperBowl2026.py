@@ -157,9 +157,10 @@ else:
     dt_inicio_local = zona_local.localize(datetime.combine(fecha_inicio, hora_inicio))
     dt_fin_local = zona_local.localize(datetime.combine(fecha_fin, hora_fin))
 
-    if dt_inicio_local >= dt_fin_local:
-        st.error("⚠️ La fecha/hora de inicio no puede ser posterior o igual a la de fin.")
+    if dt_fin_local <= dt_inicio_local:
+        st.error("End datetime must be later than start datetime.")
         st.stop()
+
 
     ts_start = int(dt_inicio_local.astimezone(pytz.utc).timestamp() * 1000)
     ts_end = int(dt_fin_local.astimezone(pytz.utc).timestamp() * 1000)
