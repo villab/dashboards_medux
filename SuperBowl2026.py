@@ -669,7 +669,10 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
         title=titulo,
         color_discrete_map=color_map
     )
-
+    Y_AXIS_LABELS = {
+        "callSetUpTimeL3": "Call setup time (ms)",
+        "callSetUpSuccessL3": "Call setup success (%)"
+    }
     fig.update_layout(
         xaxis_title="Fecha",
         yaxis_title=y_field,
@@ -726,25 +729,12 @@ else:
     if not df_confess.empty:
         grafica_kpi(df_confess, "loadingTime", "Loading time (ms)")
 
-    # ================== Voice ==================
-    #st.header("Voice")
-
-    #df_voice = df_kpi[df_kpi["test"] == "voice-out"]
-    #if not df_voice.empty:
-    #    grafica_kpi(df_voice, "callSetUpTimeL3", "Call set up time (ms)")
-    #    df_voice["callSetUpSuccess %"] = df_voice["callSetUpSuccessL3"] * 100
-
-    #    grafica_kpi(df_voice, "callSetUpSuccessL3", "Call set up success (%)")
-
-    #----------------------
+    #------------------ Voice Out ----------------------
     st.header("Voice")
 
     df_voice = df_kpi[df_kpi["test"] == "voice-out"]
     if not df_voice.empty:
         grafica_kpi(df_voice, "callSetUpTimeL3", "Call set up time (ms)")
-    
-        # Crear columna % (nombre limpio)
-        df_voice["callSetUpSuccess %"] = df_voice["callSetUpSuccessL3"] * 100
     
         grafica_kpi(
             df_voice,
