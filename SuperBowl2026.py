@@ -16,11 +16,11 @@ st.markdown("### SUPER BOWL 2026 - PROBES MONITOR")
 # ===========================================================
 # 🔐 TOKEN Y PROBES DESDE SECRETS
 # ===========================================================
-st.sidebar.caption("🔐 API Setup auto-mode")
+st.sidebar.caption("API Setup auto-mode")
 try:
     token = st.secrets["token"]
     probes = st.secrets["ids"]
-    st.sidebar.caption(f"✅ Token y {len(probes)} probes from secrets")
+    st.sidebar.caption(f"Token & {len(probes)} probes from secrets")
 except Exception as e:
     st.caption("❌ No se pudo cargar token o sondas desde secrets.")
     st.exception(e)
@@ -54,7 +54,7 @@ programas = st.sidebar.multiselect(
 # 🌍 TIME ZONE (Selector)
 # ===========================================================
 st.sidebar.markdown("---")
-st.sidebar.header("🌍 Time Zone")
+st.sidebar.header("Time Zone")
 
 tz_map = {
     "Los Angeles (PT)": "America/Los_Angeles",
@@ -74,7 +74,7 @@ zona_local = pytz.timezone(tz_map[tz_label])
 # ⏱️ ACTUALIZACIÓN EN TIEMPO REAL
 # ===========================================================
 st.sidebar.markdown("---")
-st.sidebar.header("⏱️ Automatic Update")
+st.sidebar.header("Automatic Update")
 
 refresh_seconds = st.sidebar.slider("refresh frequency (seconds)", 10, 300, 30)
 usar_real_time = st.sidebar.checkbox("Turn realtime mode on (last 8 h)", value=True)
@@ -89,7 +89,7 @@ ahora_local = datetime.now(zona_local)
 inicio_defecto_local = ahora_local - timedelta(days=1)
 
 st.sidebar.markdown("---")
-st.sidebar.header("📅 Date")
+st.sidebar.header("Date")
 
 fecha_inicio = st.sidebar.date_input("Date Start", inicio_defecto_local.date())
 hora_inicio = st.sidebar.time_input("Start hour", inicio_defecto_local.time())
@@ -124,11 +124,11 @@ else:
 
 
 # Mostrar rango activo (formato Las Vegas)
-st.sidebar.markdown("### 🕒 Active Query")
+st.sidebar.markdown("### Active Query")
 inicio_local_str = datetime.fromtimestamp(ts_start / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
 fin_local_str = datetime.fromtimestamp(ts_end / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
-st.sidebar.write(f"Inicio : {inicio_local_str}")
-st.sidebar.write(f"Fin : {fin_local_str}")
+st.sidebar.write(f"Start : {inicio_local_str}")
+st.sidebar.write(f"End : {fin_local_str}")
 
 # ===========================================================
 # 📡 CONFIGURACIÓN API
@@ -566,7 +566,7 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
         else:
             zoom_default = 10
 
-        zoom_global = st.sidebar.slider("🔍 Zoom general mapas", 3, 15, int(zoom_default))
+        zoom_global = st.sidebar.slider("Global zoom map", 3, 15, int(zoom_default))
 
         # 🎨 Colores fijos por operador (agrega o ajusta según tus ISPs)
         color_map = {
