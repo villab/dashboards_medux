@@ -708,7 +708,7 @@ grafica_kpi(df_confess, "loadingTime", "Loading time (ms)")
 df_voice = df_kpi[df_kpi["test"] == "voice-out"]
 grafica_kpi(df_voice, "callSetUpTimeL3", "Tiempo establecimiento llamada (ms)")
 
-df_youtube = df_kpi[df_kpi["test"] == "youtube-test]
+df_youtube = df_kpi[df_kpi["test"] == "youtube-api]
 grafica_kpi(df_youtube, "avgVideoResolution", "Video resolution (p)")
 
 
