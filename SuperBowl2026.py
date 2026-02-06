@@ -680,7 +680,7 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
     if y_field == "callSetUpSuccessL3":
         fig.update_yaxes(
             tickformat=".0%",
-            range=[0, 1]    
+            range=[0, 1.01]    
         )
     st.plotly_chart(fig, use_container_width=True)
 
