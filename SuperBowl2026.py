@@ -908,7 +908,7 @@ else:
             df_summary,
             use_container_width=True,
             #hide_index=True
-            height=500
+            height=450
         )
     
 
