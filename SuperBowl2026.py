@@ -650,13 +650,7 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
         st.info(f"ℹ️ No hay datos válidos para {titulo}")
         return
 
-    # --- Asegurar numérico real ---
-    df_g = df_g[df_g[y_field].apply(lambda x: isinstance(x, (int, float)))]
-    
-    if df_g.empty:
-        st.info(f"ℹ️ No hay valores numéricos válidos para {titulo}")
-        return
-    
+
     # --- Agregación segura ---
     df_agg = (
         df_g
