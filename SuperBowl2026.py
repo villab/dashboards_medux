@@ -706,7 +706,7 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean",color_by="isp"
                 x=0.5,
                 title_text=""
             ),
-            margin=dict(t=90)
+            margin=dict(t=100)
     )
 
     st.plotly_chart(fig, use_container_width=True)
