@@ -114,7 +114,7 @@ st.sidebar.markdown("---")
 st.sidebar.header("Automatic Update")
 
 refresh_seconds = st.sidebar.slider("refresh frequency (seconds)", 10, 300, 30)
-usar_real_time = st.sidebar.checkbox("Turn realtime mode on (last 8 h)", value=True)
+usar_real_time = st.sidebar.checkbox("Turn realtime mode on", value=True)
 
 if usar_real_time:
     st_autorefresh(interval=refresh_seconds * 1000, key="real_time_refresh")
@@ -139,12 +139,19 @@ hora_fin = st.sidebar.time_input("End Hour", ahora_local.time())
 # ===========================================================
 # CALCULAR TIMESTAMPS
 # ===========================================================
-if usar_real_time:
-    # Últimas 8h, modo automático
-    ts_end = int(datetime.now(pytz.utc).timestamp() * 1000)
-    ts_start = int((datetime.now(pytz.utc) - timedelta(hours=8)).timestamp() * 1000)
+REALTIME_HOURS = 4
 
-    st.sidebar.caption(f"🔁 Realtime mode ON (last 8h, refresh {refresh_seconds}s)")
+if usar_real_time:
+   
+    ts_end = int(datetime.now(pytz.utc).timestamp() * 1000)
+    ts_start = int(
+        (datetime.now(pytz.utc) - timedelta(hours=REALTIME_HOURS))
+        .timestamp() * 1000
+    )
+
+    st.sidebar.caption(
+        f"Realtime mode ON (last {REALTIME_HOURS}h, refresh {refresh_seconds}s)"
+    )
 else:
     # Respeta exactamente las fechas y horas que el usuario selecciona
     dt_inicio_local = zona_local.localize(datetime.combine(fecha_inicio, hora_inicio))
