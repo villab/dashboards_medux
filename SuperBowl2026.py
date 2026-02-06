@@ -689,36 +689,50 @@ col_probe = next(
 # Filtrar dataframe según Backpack seleccionado
 df_kpi = filtrar_por_backpack(df, backpack_option, col_probe)
 
-#st.subheader("Velocidad de Red (Download / Upload)")
-st.header("Speed Performance")  # Más grande
+if "df" not in st.session_state or st.session_state.df.empty:
+    st.info("👈 Consulta primero la API para mostrar las gráficas KPI.")
+else:
+    df_kpi = filtrar_por_backpack(st.session_state.df, backpack_option, col_probe)
 
-df_dl = df_kpi[df_kpi["test"] == "cloud-download"]
-grafica_kpi(df_dl, "speedDl", "Download Speed (Mbps)")
+    # ================== Velocidad de Red ==================
+    st.header("Speed Performance")  # Más grande
 
-df_ul = df_kpi[df_kpi["test"] == "cloud-upload"]
-grafica_kpi(df_ul, "speedUl", "Upload Speed (Mbps)")
+    df_dl = df_kpi[df_kpi["test"] == "cloud-download"]
+    if not df_dl.empty:
+        grafica_kpi(df_dl, "speedDl", "Download Speed (Mbps)")
 
-st.header("Ping")  
+    df_ul = df_kpi[df_kpi["test"] == "cloud-upload"]
+    if not df_ul.empty:
+        grafica_kpi(df_ul, "speedUl", "Upload Speed (Mbps)")
 
-df_ping = df_kpi[df_kpi["test"] == "ping-test"]
-grafica_kpi(df_ping, "avgLatency", "Average Latency (ms)")
+    # ================== Ping ==================
+    st.header("Ping")
 
-df_latency = df_kpi[df_kpi["test"] == "ping-test"]
-grafica_kpi(df_ping, "jitter", "Jitter (ms)")
+    df_ping = df_kpi[df_kpi["test"] == "ping-test"]
+    if not df_ping.empty:
+        grafica_kpi(df_ping, "avgLatency", "Average Latency (ms)")
+        grafica_kpi(df_ping, "jitter", "Jitter (ms)")
 
-st.header("Web Browsing")  
+    # ================== Web Browsing ==================
+    st.header("Web Browsing")
 
-df_confess = df_kpi[df_kpi["test"] == "confess-chrome"]
-grafica_kpi(df_confess, "loadingTime", "Loading time (ms)")
+    df_confess = df_kpi[df_kpi["test"] == "confess-chrome"]
+    if not df_confess.empty:
+        grafica_kpi(df_confess, "loadingTime", "Loading time (ms)")
 
-st.header("Voice")  
+    # ================== Voice ==================
+    st.header("Voice")
 
-df_voice = df_kpi[df_kpi["test"] == "voice-out"]
-grafica_kpi(df_voice, "callSetUpTimeL3", "Call set up time (ms)")
+    df_voice = df_kpi[df_kpi["test"] == "voice-out"]
+    if not df_voice.empty:
+        grafica_kpi(df_voice, "callSetUpTimeL3", "Call set up time (ms)")
 
-st.header("Streaming")  
-df_youtube = df_kpi[df_kpi["test"] == "youtube-test"]
-grafica_kpi(df_youtube, "avgVideoResolution", "Video resolution (p)")
+    # ================== Streaming ==================
+    st.header("Streaming")
+
+    df_youtube = df_kpi[df_kpi["test"] == "youtube-test"]
+    if not df_youtube.empty:
+        grafica_kpi(df_youtube, "avgVideoResolution", "Video resolution (p)")
 
 
 
