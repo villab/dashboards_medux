@@ -7,7 +7,7 @@ import pytz
 from streamlit_autorefresh import st_autorefresh
 import time
 
--------------------------------------
+#-------------------------------------
 #Diccionario ISP
 
 ISP_NAME_MAP = {
