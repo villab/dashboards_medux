@@ -731,14 +731,14 @@ else:
     if not df_voice_set.empty:
         # Multiplicar por 100 para mostrar %
         df_voice_set["callSetUpSuccess %"] = df_voice_set["callSetUpSuccessL3"] * 100
-    
-        grafica_kpi(df_voice_set, "callSetUpSuccessL3", "Call set up success (%)")
         fig.update_layout(
             xaxis_title="Fecha",
             yaxis_title="Call setup success (%)",  # 👈 aquí cambias el nombre
             hovermode="x unified",
             height=450
         )
+        grafica_kpi(df_voice_set, "callSetUpSuccessL3", "Call set up success (%)")
+
 
     # ================== Streaming ==================
     st.header("Streaming")
