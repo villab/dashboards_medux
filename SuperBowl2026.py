@@ -667,7 +667,7 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
                  .reset_index()
             )
         )
-        .reset_index(drop=True)
+        .reset_index(level=0) 
     )
 
 
