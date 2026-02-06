@@ -638,43 +638,25 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
     df_g = df.copy()
 
     # --- Fecha ---
-    df_g["dateStart"] = (
-    pd.to_datetime(df_g["dateStart"], errors="coerce")
-    .dt.tz_localize(None)
-    )
-
+    df_g["dateStart"] = pd.to_datetime(df_g["dateStart"], errors="coerce").dt.tz_localize(None)
 
     # --- KPI numérico ---
     df_g[y_field] = pd.to_numeric(df_g[y_field], errors="coerce")
 
     # --- Limpiar ---
     df_g = df_g.dropna(subset=["dateStart", y_field, "isp"])
-
     if df_g.empty:
         st.info(f"ℹ️ No hay datos válidos para {titulo}")
         return
 
-
     # --- Agregación segura ---
-    df_agg = (
-        df_g
-        .groupby("isp", as_index=False)
-        .apply(
-            lambda x: (
-                x.set_index("dateStart")
-                 .resample(freq)[y_field]
-                 .mean()
-                 .reset_index()
-            )
-        )
-        .reset_index(level=0) 
-    )
+    df_agg_list = []
+    for isp, group in df_g.groupby("isp"):
+        grp = group.set_index("dateStart").resample(freq)[y_field].mean().reset_index()
+        grp["isp"] = isp
+        df_agg_list.append(grp)
 
-    df_agg = df_agg.rename(columns={"level_0": "isp"})
-
-    if df_agg.empty:
-        st.info(f"ℹ️ No hay datos agregados para {titulo}")
-        return
+    df_agg = pd.concat(df_agg_list, ignore_index=True)
 
     # --- Plot ---
     fig = px.line(
@@ -682,6 +664,7 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
         x="dateStart",
         y=y_field,
         color="isp",
+        hover_name="isp",
         markers=True,
         title=titulo
     )
@@ -694,6 +677,7 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
 
 # Detectar columna de sonda
 col_probe = next(
