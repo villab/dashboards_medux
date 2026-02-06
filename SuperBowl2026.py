@@ -658,12 +658,18 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
     # --- Agregación segura ---
     df_agg = (
         df_g
-        .set_index("dateStart")
-        .groupby("isp", group_keys=False)
-        .resample(freq)
-        .agg({y_field: "mean"})
-        .reset_index()
+        .groupby("isp", as_index=False)
+        .apply(
+            lambda x: (
+                x.set_index("dateStart")
+                 .resample(freq)[y_field]
+                 .mean()
+                 .reset_index()
+            )
+        )
+        .reset_index(drop=True)
     )
+
 
 
     if df_agg.empty:
