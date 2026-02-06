@@ -700,12 +700,13 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean",color_by="isp"
         fig.update_layout(
             legend=dict(
                 orientation="h",
-                yanchor="bottom",
+                yanchor="top",
                 y=1.12,
                 xanchor="center",
                 x=0.5,
                 title_text=""
-            )
+            ),
+            margin=dict(t=90)
     )
 
     st.plotly_chart(fig, use_container_width=True)
