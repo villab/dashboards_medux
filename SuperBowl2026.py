@@ -701,8 +701,8 @@ grafica_kpi(df_ping, "avgLatency", "Average Latency (ms)")
 df_latency = df_kpi[df_kpi["test"] == "ping-test"]
 grafica_kpi(df_ping, "jitter", "Jitter (ms)")
 
-#df_confess = df_kpi[df_kpi["test"] == "confess-chrome"]
-#grafica_kpi(df_confess, "loadingTime", "Loading time (ms)")
+df_confess = df_kpi[df_kpi["test"] == "confess-chrome"]
+grafica_kpi(df_confess, "loadingTime", "Loading time (ms)")
 
 df_voice = df_kpi[df_kpi["test"] == "voice-out"]
 grafica_kpi(df_voice, "callSetUpTimeL3", "Tiempo establecimiento llamada (ms)")
