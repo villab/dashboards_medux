@@ -323,6 +323,10 @@ def resumen_kpis_por_isp(df, kpi_def, isp_map=None):
                 continue
 
             df_test[field] = pd.to_numeric(df_test[field], errors="coerce")
+            
+            # Convertir a porcentaje SOLO para call setup success
+            if field == "callSetUpSuccessL3":
+                df_test[field] = df_test[field] * 100
 
             resumen = (
                 df_test
