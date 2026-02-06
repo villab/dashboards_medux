@@ -139,7 +139,7 @@ hora_fin = st.sidebar.time_input("End Hour", ahora_local.time())
 # ===========================================================
 # CALCULAR TIMESTAMPS
 # ===========================================================
-REALTIME_HOURS = 4
+REALTIME_HOURS = 2
 
 if usar_real_time:
    
