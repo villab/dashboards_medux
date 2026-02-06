@@ -675,7 +675,7 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
     }
     fig.update_layout(
         xaxis_title="Fecha",
-        yaxis_title=y_field,
+        yaxis_title=Y_AXIS_LABELS.get(y_field, titulo)
         hovermode="x unified",
         height=450
     )
