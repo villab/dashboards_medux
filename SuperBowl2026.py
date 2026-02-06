@@ -889,7 +889,7 @@ else:
         grafica_kpi(df_youtube, "bufferingTime", "Buffering Time (ms)")
 
 
-    st.header("📊 KPI Summary by Operator")
+    st.header("KPI Summary by Operator")
 
     df_summary = resumen_kpis_por_isp(
         df_kpi,
