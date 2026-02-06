@@ -689,8 +689,8 @@ col_probe = next(
 # Filtrar dataframe según Backpack seleccionado
 df_kpi = filtrar_por_backpack(df, backpack_option, col_probe)
 
-st.subheader("Velocidad de Red (Download / Upload)")
-st.header("Velocidad de Red")  # Más grande
+#st.subheader("Velocidad de Red (Download / Upload)")
+st.header("Speed Performance")  # Más grande
 
 df_dl = df_kpi[df_kpi["test"] == "cloud-download"]
 grafica_kpi(df_dl, "speedDl", "Download Speed (Mbps)")
@@ -698,18 +698,25 @@ grafica_kpi(df_dl, "speedDl", "Download Speed (Mbps)")
 df_ul = df_kpi[df_kpi["test"] == "cloud-upload"]
 grafica_kpi(df_ul, "speedUl", "Upload Speed (Mbps)")
 
+st.header("Ping")  
+
 df_ping = df_kpi[df_kpi["test"] == "ping-test"]
 grafica_kpi(df_ping, "avgLatency", "Average Latency (ms)")
 
 df_latency = df_kpi[df_kpi["test"] == "ping-test"]
 grafica_kpi(df_ping, "jitter", "Jitter (ms)")
 
+st.header("Web Browsing")  
+
 df_confess = df_kpi[df_kpi["test"] == "confess-chrome"]
 grafica_kpi(df_confess, "loadingTime", "Loading time (ms)")
+
+st.header("Voice")  
 
 df_voice = df_kpi[df_kpi["test"] == "voice-out"]
 grafica_kpi(df_voice, "callSetUpTimeL3", "Tiempo establecimiento llamada (ms)")
 
+st.header("Streaming")  
 df_youtube = df_kpi[df_kpi["test"] == "youtube-test"]
 grafica_kpi(df_youtube, "avgVideoResolution", "Video resolution (p)")
 
