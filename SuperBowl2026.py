@@ -630,7 +630,7 @@ else:
 #------------------------------------------########
 #--------------GRAFICA DE KPIS POR ISP
 
-def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
+def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean",color_by="isp"):
     if not all(col in df.columns for col in ["dateStart", y_field, "isp"]):
         st.warning(f"⚠️ No se encontró la columna '{y_field}' en los datos.")
         return
@@ -651,10 +651,17 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
 
     # --- Agregación segura ---
     df_agg_list = []
-    for isp, group in df_g.groupby("isp"):
-        grp = group.set_index("dateStart").resample(freq)[y_field].mean().reset_index()
-        grp["isp"] = isp
+    for key, group in df_g.groupby(color_by):
+        grp = (
+            group
+            .set_index("dateStart")
+            .resample(freq)[y_field]
+            .mean()
+            .reset_index()
+        )
+        grp[color_by] = key
         df_agg_list.append(grp)
+
 
     df_agg = pd.concat(df_agg_list, ignore_index=True)
 
@@ -663,12 +670,14 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
         df_agg,
         x="dateStart",
         y=y_field,
-        color="isp",
-        hover_name="isp",
+        color=color_by,
+        hover_name=color_by,
         markers=True,
         title=titulo,
-        color_discrete_map=color_map
+        color_discrete_map=color_map if color_by == "isp" else None
     )
+
+
     Y_AXIS_LABELS = {
         "callSetUpTimeL3": "Call setup time (ms)",
         "callSetUpSuccessL3": "Call setup success (%)"
@@ -702,7 +711,7 @@ if "df" not in st.session_state or st.session_state.df.empty:
 else:
     df_kpi = filtrar_por_backpack(st.session_state.df, backpack_option, col_probe)
 
-    # ================== Velocidad de Red ==================
+    # ================== Velocidad  ==================
     st.header("Speed Performance")  # Más grande
 
     df_dl = df_kpi[df_kpi["test"] == "cloud-download"]
