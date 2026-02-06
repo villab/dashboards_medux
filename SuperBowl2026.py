@@ -40,7 +40,7 @@ KPI_DEFINITION = {
     "youtube-test": {
         "avgVideoResolution": "Video resolution (p)",
         "bufferingTime": "Buffering time (ms)",
-        "speedDl", "Youtube Speed DL (Mbps)")
+        "speedDl", "Youtube Speed DL (Mbps)"
     }
 }
 
