@@ -7,6 +7,14 @@ import pytz
 from streamlit_autorefresh import st_autorefresh
 import time
 
+-------------------------------------
+#Diccionario ISP
+
+ISP_NAME_MAP = {
+    "att_us": "AT&T",
+    "t-mobile_us": "T-Mobile",
+    "verizon_wireless_us": "Verizon",
+}
 # ===========================================================
 # 🧠 CONFIGURACIÓN INICIAL
 # ===========================================================
@@ -97,10 +105,10 @@ fecha_fin = st.sidebar.date_input("Date End", ahora_local.date())
 hora_fin = st.sidebar.time_input("End Hour", ahora_local.time())
 
 # ===========================================================
-# 🧮 CALCULAR TIMESTAMPS
+# CALCULAR TIMESTAMPS
 # ===========================================================
 # ===========================================================
-# 🧮 CALCULAR TIMESTAMPS (BLOQUE CORRECTO)
+# CALCULAR TIMESTAMPS
 # ===========================================================
 if usar_real_time:
     # Últimas 8h, modo automático
@@ -123,7 +131,7 @@ else:
     st.sidebar.caption("📅 Manual datetime range active")
 
 
-# Mostrar rango activo (formato Las Vegas)
+# Mostrar rango activo
 st.sidebar.markdown("### Active Query")
 inicio_local_str = datetime.fromtimestamp(ts_start / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
 fin_local_str = datetime.fromtimestamp(ts_end / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
@@ -131,7 +139,7 @@ st.sidebar.write(f"Start : {inicio_local_str}")
 st.sidebar.write(f"End : {fin_local_str}")
 
 # ===========================================================
-# 📡 CONFIGURACIÓN API
+# CONFIGURACIÓN API
 # ===========================================================
 url = "https://medux-ids.caseonit.com/api/results"
 headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
@@ -322,7 +330,7 @@ else:
     df = st.session_state.df
 
 # ===========================================================
-# 📡 Probes Status dividido por Backpack (zona horaria Las Vegas, tablas lado a lado)
+# 📡 Probes Status dividido por Backpack 
 # ===========================================================
 st.subheader("Probes Status")
 
@@ -389,15 +397,8 @@ else:
                 df_last_present["Último reporte"] = df_last_present["Último reporte"].dt.tz_localize(zona_local)
             df_last_present["Último reporte"] = df_last_present["Último reporte"].dt.tz_convert(zona_local).dt.strftime('%Y-%m-%d %H:%M:%S')
 
-            # --- Mapa de equivalencias ISP ---
-            isp_map = {
-                "att_us": "AT&T",
-                "t-mobile_us": "T-Mobile",
-                "verizon_wireless_us": "Verizon",
-            
-            }
-
-            df_last_present["ISP"] = df_last_present["ISP"].replace(isp_map)
+     
+            df_last_present["ISP"] = df_last_present["ISP"].replace(ISP_NAME_MAP)
 
             # --- Crear dos columnas para mostrar tablas lado a lado ---
             col1, col2 = st.columns(2)
@@ -759,21 +760,22 @@ else:
     st.subheader("Loading time by target per operator")
     
     isps = sorted(df_confess["isp"].unique())
-    
     cols = st.columns(len(isps))
     
     for col, isp in zip(cols, isps):
         with col:
-            st.markdown(f"**{isp}**")
+            # 🔹 Nombre bonito reutilizando el mapa
+            isp_label = ISP_NAME_MAP.get(isp, isp)
     
             df_isp = df_confess[df_confess["isp"] == isp]
     
             grafica_kpi(
                 df_isp,
                 "loadingTime",
-                f"{isp} – Loading time by target",
+                isp_label,   # 👈 SOLO el nombre bonito como título
                 color_by="target"
             )
+
 
 
 
