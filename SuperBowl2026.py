@@ -733,12 +733,12 @@ else:
 
 
     
-    df_voice_set = df_kpi[df_kpi["test"] == "voice-out"]
-    if not df_voice_set.empty:
-        # Multiplicar por 100 para mostrar %
-        df_voice_set["callSetUpSuccess %"] = df_voice_set["callSetUpSuccessL3"] * 100
+ #   df_voice_set = df_kpi[df_kpi["test"] == "voice-out"]
+ #   if not df_voice_set.empty:
+ #       # Multiplicar por 100 para mostrar %
+ #       df_voice_set["callSetUpSuccess %"] = df_voice_set["callSetUpSuccessL3"] * 100
 
-        grafica_kpi(df_voice_set, "callSetUpSuccessL3", "Call set up success (%)")
+#        grafica_kpi(df_voice_set, "callSetUpSuccessL3", "Call set up success (%)")
 
 
     # ================== Streaming ==================
