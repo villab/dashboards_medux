@@ -521,7 +521,12 @@ else:
                     isp_label = "N/A"
         
                 columnas_finales = [c for c in columnas_mostrar if c in df_sonda.columns]
-        
+                
+                # 🔒 FIX 2 — Evitar epoch falso (1969-12-31) en columnas adicionales
+                for c in columnas_finales:
+                    if c in df_sonda.columns and pd.api.types.is_datetime64_any_dtype(df_sonda[c]):
+                        df_sonda[c] = df_sonda[c].where(df_sonda[c].notna(), "")
+
                 with st.expander(f"📡 Probe {sonda} | ISP: {isp_label} ({len(df_sonda)} tests)", expanded=False):
                     st.dataframe(
                         df_sonda[columnas_finales],
