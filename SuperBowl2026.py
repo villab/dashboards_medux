@@ -15,6 +15,35 @@ ISP_NAME_MAP = {
     "t-mobile_us": "T-Mobile",
     "verizon_wireless_us": "Verizon",
 }
+
+#-----------Definicion KPIs para tabla resumen------
+
+KPI_DEFINITION = {
+    "cloud-download": {
+        "speedDl": "Download Speed (Mbps)"
+    },
+    "cloud-upload": {
+        "speedUl": "Upload Speed (Mbps)"
+    },
+    "ping-test": {
+        "avgLatency": "Average Latency (ms)",
+        "jitter": "Jitter (ms)",
+        "packetLoss": "Packet Loss (%)"
+    },
+    "voice-out": {
+        "callSetUpTimeL3": "Call setup time (ms)",
+        "callSetUpSuccessL3": "Call setup success (%)"
+    },
+    "confess-chrome": {
+        "loadingTime": "Loading time (ms)"
+    },
+    "youtube-test": {
+        "avgVideoResolution": "Video resolution (p)",
+        "bufferingTime": "Buffering time (ms)",
+        "speedDl", "Youtube Speed DL (Mbps)")
+    }
+}
+
 # ===========================================================
 # 🧠 CONFIGURACIÓN INICIAL
 # ===========================================================
@@ -278,6 +307,47 @@ def filtrar_por_backpack(df, opcion, col_probe):
 
     sondas = [str(x) for x in secretos[key]]
     return df[df[col_probe].astype(str).isin(sondas)]
+
+
+def resumen_kpis_por_isp(df, kpi_def, isp_map=None):
+    filas = []
+
+    for test, metrics in kpi_def.items():
+        df_test = df[df["test"] == test]
+
+        if df_test.empty:
+            continue
+
+        for field, label in metrics.items():
+            if field not in df_test.columns:
+                continue
+
+            df_test[field] = pd.to_numeric(df_test[field], errors="coerce")
+
+            resumen = (
+                df_test
+                .dropna(subset=["isp", field])
+                .groupby("isp")[field]
+                .mean()
+            )
+
+            for isp, value in resumen.items():
+                filas.append({
+                    "KPI": label,
+                    "ISP": isp_map.get(isp, isp) if isp_map else isp,
+                    "Value": value
+                })
+
+    df_out = pd.DataFrame(filas)
+
+    if df_out.empty:
+        return df_out
+
+    return (
+        df_out
+        .pivot(index="KPI", columns="ISP", values="Value")
+        .reset_index()
+    )
 
 
 # ===========================================================
@@ -819,7 +889,23 @@ else:
         grafica_kpi(df_youtube, "bufferingTime", "Buffering Time (ms)")
 
 
+    st.header("📊 KPI Summary by Operator")
 
+    df_summary = resumen_kpis_por_isp(
+        df_kpi,
+        KPI_DEFINITION,
+        isp_map=ISP_NAME_MAP
+    )
+    
+    if df_summary.empty:
+        st.info("ℹ️ No hay datos suficientes para generar el resumen.")
+    else:
+        st.dataframe(
+            df_summary,
+            use_container_width=True,
+            hide_index=True
+        )
+    
 
 
 
