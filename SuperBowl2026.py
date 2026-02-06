@@ -681,7 +681,7 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
         fig.update_yaxes(
             tickformat=".0%",
             range=[0, 1]    
-    
+        )
     st.plotly_chart(fig, use_container_width=True)
 
 
