@@ -165,7 +165,7 @@ def obtener_datos_pag(url, headers, body):
         if search_after:
             payload["search_after"] = search_after
 
-        st.info(f"📡 Descargando página {pagina}...")
+        st.info(f" Downloading page {pagina}...")
         r = requests.post(url, headers=headers, json=payload)
         if r.status_code != 200:
             st.error(f"❌ Error API: {r.status_code}")
@@ -192,12 +192,12 @@ def obtener_datos_pag(url, headers, body):
 
         # Si no hay más cursores, terminamos
         if not search_after or not pit:
-            st.success(f"✅ Download complete: {total:,} registros en {pagina} páginas.")
+            st.success(f"✅ Download complete: {total:,} registers in {pagina} pages.")
             break
 
         pagina += 1
         if pagina > 100:  # seguridad
-            st.warning("⚠️ Se alcanzó el límite máximo de 100 páginas.")
+            st.warning("⚠️ limit max of 100 pages.")
             break
 
     return todos_los_resultados
@@ -315,7 +315,7 @@ if should_fetch:
 
 
     st.markdown(
-        f"<span style='font-size:0.9em; color:gray;'> Datos cargados correctamente ({len(df):,} filas)</span>",
+        f"<span style='font-size:0.9em; color:gray;'> Data load successfull ({len(df):,} rows)</span>",
         unsafe_allow_html=True
     )
 else:
