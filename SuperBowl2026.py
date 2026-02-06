@@ -683,16 +683,16 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean",color_by="isp"
     )
 
     if color_by == "isp":
-    fig.for_each_trace(
-        lambda t: t.update(
-            name=ISP_NAME_MAP.get(t.name, t.name),
-            legendgroup=ISP_NAME_MAP.get(t.legendgroup, t.legendgroup),
-            hovertemplate=t.hovertemplate.replace(
-                t.name,
-                ISP_NAME_MAP.get(t.name, t.name)
-            ) if t.hovertemplate else None
+        fig.for_each_trace(
+            lambda t: t.update(
+                name=ISP_NAME_MAP.get(t.name, t.name),
+                legendgroup=ISP_NAME_MAP.get(t.legendgroup, t.legendgroup),
+                hovertemplate=t.hovertemplate.replace(
+                    t.name,
+                    ISP_NAME_MAP.get(t.name, t.name)
+                ) if t.hovertemplate else None
+            )
         )
-    )
 
     Y_AXIS_LABELS = {
         "callSetUpTimeL3": "Call setup time (ms)",
