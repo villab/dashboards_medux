@@ -16,7 +16,7 @@ st.markdown("### SUPER BOWL 2026 - PROBES MONITOR")
 # ===========================================================
 # 🔐 TOKEN Y PROBES DESDE SECRETS
 # ===========================================================
-st.sidebar.caption("🔐 Configuración API (modo automático)")
+st.sidebar.caption("🔐 API Setup auto-mode")
 try:
     token = st.secrets["token"]
     probes = st.secrets["ids"]
@@ -63,7 +63,7 @@ tz_map = {
 }
 
 tz_label = st.sidebar.selectbox(
-    "Mostrar fechas en:",
+    "Date time zone",
     list(tz_map.keys()),
     index=0  # Los Angeles por defecto
 )
@@ -91,10 +91,10 @@ inicio_defecto_local = ahora_local - timedelta(days=1)
 st.sidebar.markdown("---")
 st.sidebar.header("📅 Date")
 
-fecha_inicio = st.sidebar.date_input("Fecha de inicio", inicio_defecto_local.date())
-hora_inicio = st.sidebar.time_input("Hora de inicio", inicio_defecto_local.time())
-fecha_fin = st.sidebar.date_input("Fecha de fin", ahora_local.date())
-hora_fin = st.sidebar.time_input("Hora de fin", ahora_local.time())
+fecha_inicio = st.sidebar.date_input("Date Start", inicio_defecto_local.date())
+hora_inicio = st.sidebar.time_input("Start hour", inicio_defecto_local.time())
+fecha_fin = st.sidebar.date_input("Date End", ahora_local.date())
+hora_fin = st.sidebar.time_input("End Hour", ahora_local.time())
 
 # ===========================================================
 # 🧮 CALCULAR TIMESTAMPS
@@ -127,8 +127,8 @@ else:
 st.sidebar.markdown("### 🕒 Active Query")
 inicio_local_str = datetime.fromtimestamp(ts_start / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
 fin_local_str = datetime.fromtimestamp(ts_end / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
-st.sidebar.write(f"Inicio (Las Vegas): {inicio_local_str}")
-st.sidebar.write(f"Fin (Las Vegas): {fin_local_str}")
+st.sidebar.write(f"Inicio : {inicio_local_str}")
+st.sidebar.write(f"Fin : {fin_local_str}")
 
 # ===========================================================
 # 📡 CONFIGURACIÓN API
