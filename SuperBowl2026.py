@@ -742,6 +742,8 @@ else:
     df_youtube = df_kpi[df_kpi["test"] == "youtube-test"]
     if not df_youtube.empty:
         grafica_kpi(df_youtube, "avgVideoResolution", "Video resolution (p)")
+        grafica_kpi(df_youtube, "speedDl", "Youtube Speed DL (Mbps)")
+        grafica_kpi(df_youtube, "bufferingTime", "Buffering Time (ms)")
 
 
 
