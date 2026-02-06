@@ -714,7 +714,7 @@ grafica_kpi(df_confess, "loadingTime", "Loading time (ms)")
 st.header("Voice")  
 
 df_voice = df_kpi[df_kpi["test"] == "voice-out"]
-grafica_kpi(df_voice, "callSetUpTimeL3", "Tiempo establecimiento llamada (ms)")
+grafica_kpi(df_voice, "callSetUpTimeL3", "Call set up time (ms)")
 
 st.header("Streaming")  
 df_youtube = df_kpi[df_kpi["test"] == "youtube-test"]
