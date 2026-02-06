@@ -10,7 +10,7 @@ import time
 # ===========================================================
 # 🧠 CONFIGURACIÓN INICIAL
 # ===========================================================
-st.set_page_config(page_title="Medux Verveba Dashboard", layout="wide")
+st.set_page_config(page_title="Medux Monitoring Dashboard", layout="wide")
 st.markdown("### SUPER BOWL 2026 - PROBES MONITOR")
 
 # ===========================================================
@@ -713,6 +713,9 @@ grafica_kpi(df_ul, "speedUl", "Upload Speed (Mbps)")
 
 df_ping = df_kpi[df_kpi["test"] == "ping-test"]
 grafica_kpi(df_ping, "avgLatency", "Average Latency (ms)")
+
+df_latency = df_kpi[df_kpi["test"] == "ping-test"]
+grafica_kpi(df_ping, "jitter", "Jitter (ms)")
 
 #df_confess = df_kpi[df_kpi["test"] == "confess-chrome"]
 #grafica_kpi(df_confess, "loadingTime", "Loading time (ms)")
