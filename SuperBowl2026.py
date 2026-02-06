@@ -732,11 +732,29 @@ else:
         grafica_kpi(df_ping, "packetLoss", "Packet Loss (%)")
 
     # ================== Web Browsing ==================
+# ================== Web Browsing ==================
     st.header("Web Browsing")
-
+    
     df_confess = df_kpi[df_kpi["test"] == "confess-chrome"]
     if not df_confess.empty:
+    
+        # Gráfica general (por ISP)
         grafica_kpi(df_confess, "loadingTime", "Loading time (ms)")
+    
+        st.subheader("Loading time by target per operator")
+    
+        for isp in sorted(df_confess["isp"].unique()):
+            st.markdown(f"### {isp}")
+    
+            df_isp = df_confess[df_confess["isp"] == isp]
+    
+            grafica_kpi(
+                df_isp,
+                "loadingTime",
+                f"{isp} – Loading time by target",
+                color_by="target"
+            )
+
 
     #------------------ Voice Out ----------------------
     st.header("Voice")
