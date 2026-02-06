@@ -722,23 +722,30 @@ else:
         grafica_kpi(df_confess, "loadingTime", "Loading time (ms)")
 
     # ================== Voice ==================
+    #st.header("Voice")
+
+    #df_voice = df_kpi[df_kpi["test"] == "voice-out"]
+    #if not df_voice.empty:
+    #    grafica_kpi(df_voice, "callSetUpTimeL3", "Call set up time (ms)")
+    #    df_voice["callSetUpSuccess %"] = df_voice["callSetUpSuccessL3"] * 100
+
+    #    grafica_kpi(df_voice, "callSetUpSuccessL3", "Call set up success (%)")
+
+    #----------------------
     st.header("Voice")
 
     df_voice = df_kpi[df_kpi["test"] == "voice-out"]
     if not df_voice.empty:
         grafica_kpi(df_voice, "callSetUpTimeL3", "Call set up time (ms)")
-        df_voice["callSetUpSuccess %"] = df_voice["callSetUpSuccessL3"] * 100
-
-        grafica_kpi(df_voice, "callSetUpSuccessL3", "Call set up success (%)")
-
-
     
- #   df_voice_set = df_kpi[df_kpi["test"] == "voice-out"]
- #   if not df_voice_set.empty:
- #       # Multiplicar por 100 para mostrar %
- #       df_voice_set["callSetUpSuccess %"] = df_voice_set["callSetUpSuccessL3"] * 100
-
-#        grafica_kpi(df_voice_set, "callSetUpSuccessL3", "Call set up success (%)")
+        # Crear columna % (nombre limpio)
+        df_voice["callSetUpSuccess %"] = df_voice["callSetUpSuccessL3"] * 100
+    
+        grafica_kpi(
+            df_voice,
+            "callSetUpSuccess %",
+            "Call set up success (%)"
+        )
 
 
     # ================== Streaming ==================
