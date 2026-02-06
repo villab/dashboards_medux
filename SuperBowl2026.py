@@ -670,7 +670,7 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
         .reset_index(level=0) 
     )
 
-
+    df_agg = df_agg.rename(columns={"level_0": "isp"})
 
     if df_agg.empty:
         st.info(f"ℹ️ No hay datos agregados para {titulo}")
