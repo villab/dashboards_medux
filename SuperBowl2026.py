@@ -689,6 +689,8 @@ col_probe = next(
 # Filtrar dataframe según Backpack seleccionado
 df_kpi = filtrar_por_backpack(df, backpack_option, col_probe)
 
+st.subheader("Velocidad de Red (Download / Upload)")
+st.header("Velocidad de Red")  # Más grande
 
 df_dl = df_kpi[df_kpi["test"] == "cloud-download"]
 grafica_kpi(df_dl, "speedDl", "Download Speed (Mbps)")
