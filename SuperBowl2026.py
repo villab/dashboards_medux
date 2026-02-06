@@ -712,6 +712,7 @@ else:
     if not df_ping.empty:
         grafica_kpi(df_ping, "avgLatency", "Average Latency (ms)")
         grafica_kpi(df_ping, "jitter", "Jitter (ms)")
+        grafica_kpi(df_ping, "packetLoss", "Packet Loss (%)")
 
     # ================== Web Browsing ==================
     st.header("Web Browsing")
@@ -731,12 +732,7 @@ else:
     if not df_voice_set.empty:
         # Multiplicar por 100 para mostrar %
         df_voice_set["callSetUpSuccess %"] = df_voice_set["callSetUpSuccessL3"] * 100
-        fig.update_layout(
-            xaxis_title="Fecha",
-            yaxis_title="Call setup success (%)",  # 👈 aquí cambias el nombre
-            hovermode="x unified",
-            height=450
-        )
+
         grafica_kpi(df_voice_set, "callSetUpSuccessL3", "Call set up success (%)")
 
 
