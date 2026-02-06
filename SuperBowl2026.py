@@ -694,6 +694,20 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean",color_by="isp"
             tickformat=".0%",
             range=[0, 1.01]    
         )
+
+
+    if color_by == "target":
+    fig.update_layout(
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.12,
+            xanchor="center",
+            x=0.5,
+            title_text=""
+        )
+    )
+
     st.plotly_chart(fig, use_container_width=True)
 
 
