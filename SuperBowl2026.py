@@ -907,7 +907,8 @@ else:
         st.dataframe(
             df_summary,
             use_container_width=True,
-            hide_index=True
+            #hide_index=True
+            height=500
         )
     
 
