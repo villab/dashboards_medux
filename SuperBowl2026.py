@@ -247,13 +247,13 @@ def flatten_results(raw_json):
         df["program"] = "network"
 
     # 🔹 Conversión segura de fechas
-    COLUMNAS_FECHA = ["dateStart", "dateEnd", "createdAt", "timestamp"]
-
+    
+    COLUMNAS_FECHA = ["dateStart", "dateEnd"]
+    
     for col in COLUMNAS_FECHA:
         if col in df.columns:
-            serie = pd.to_datetime(df[col], errors="coerce", utc=True)
-            if serie.notna().mean() > 0.8:
-                df[col] = serie.dt.tz_convert(zona_local)
+            df[col] = pd.to_datetime(df[col], errors="coerce", utc=True).dt.tz_convert(zona_local)
+
 
     return df
     
