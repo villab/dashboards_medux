@@ -638,7 +638,11 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean"):
     df_g = df.copy()
 
     # --- Fecha ---
-    df_g["dateStart"] = pd.to_datetime(df_g["dateStart"], errors="coerce")
+    df_g["dateStart"] = (
+    pd.to_datetime(df_g["dateStart"], errors="coerce")
+    .dt.tz_localize(None)
+    )
+
 
     # --- KPI numérico ---
     df_g[y_field] = pd.to_numeric(df_g[y_field], errors="coerce")
