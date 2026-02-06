@@ -215,6 +215,7 @@ def obtener_datos_pag_no_cache(url, headers, body):
 
 def flatten_results(raw_json):
     filas = []
+
     def extraer_filas(obj, program=None):
         if isinstance(obj, dict):
             if "results" in obj:
@@ -230,39 +231,31 @@ def flatten_results(raw_json):
                     if program:
                         fila["program"] = fila.get("program", program)
                     filas.append(fila)
+
         elif isinstance(obj, list):
             for item in obj:
                 extraer_filas(item, program)
+
     extraer_filas(raw_json)
+
     if not filas:
         return pd.DataFrame()
+
     df = pd.DataFrame(filas)
+
     if "program" not in df.columns:
         df["program"] = "network"
-    # 🔹 Convertir campos de fecha detectados a zona Las Vegas
-    COLUMNAS_FECHA = [
-        "dateStart",
-        "dateEnd",
-        "createdAt",
-        "timestamp"
-    ]
-    
-     for col in COLUMNAS_FECHA:
+
+    # 🔹 Conversión segura de fechas
+    COLUMNAS_FECHA = ["dateStart", "dateEnd", "createdAt", "timestamp"]
+
+    for col in COLUMNAS_FECHA:
         if col in df.columns:
-            try:
-                serie = pd.to_datetime(df[col], errors="coerce", utc=True)
-    
-                # ✅ Solo convertir si al menos el 80% son fechas válidas
-                ratio_validos = serie.notna().mean()
-    
-                if ratio_validos > 0.8:
-                    df[col] = serie.dt.tz_convert(zona_local)
-    
-            except Exception:
-                pass
+            serie = pd.to_datetime(df[col], errors="coerce", utc=True)
+            if serie.notna().mean() > 0.8:
+                df[col] = serie.dt.tz_convert(zona_local)
 
     return df
-
     
 
 def filtrar_por_backpack(df, opcion, col_probe):
