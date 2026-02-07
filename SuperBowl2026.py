@@ -594,7 +594,7 @@ else:
 
     # --- 🔹 Selector de columnas adicionales
     columnas_adicionales = st.multiselect(
-        "Columnas adicionales",
+        "Additional columns",
         options=columnas_extra,
         default=[],  # no marcadas por defecto
         help="Las columnas base no se pueden quitar. Selecciona columnas extra si quieres ver más datos."
