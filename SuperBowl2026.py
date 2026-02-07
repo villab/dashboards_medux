@@ -813,7 +813,7 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean",color_by="isp"
         "callSetUpSuccessL3": "Call setup success (%)"
     }
     fig.update_layout(
-        xaxis_title="Fecha",
+        xaxis_title="Date",
         yaxis_title=Y_AXIS_LABELS.get(y_field, titulo),
         hovermode="x unified",
         height=450
