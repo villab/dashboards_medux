@@ -675,9 +675,16 @@ st.markdown("#### 🗺️ Samples Map by ISP")
 
 if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"]):
     df_plot = df.copy()
+    
     df_plot["latitude"] = pd.to_numeric(df_plot["latitude"], errors="coerce")
     df_plot["longitude"] = pd.to_numeric(df_plot["longitude"], errors="coerce")
+    
+    # ❌ Eliminar NaN y coordenadas inválidas (0,0)
     df_plot = df_plot.dropna(subset=["latitude", "longitude", "isp"])
+    df_plot = df_plot[
+        ~((df_plot["latitude"] == 0) & (df_plot["longitude"] == 0))
+    ]
+
 
     if not df_plot.empty:
         lat_range = df_plot["latitude"].max() - df_plot["latitude"].min()
