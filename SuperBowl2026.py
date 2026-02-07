@@ -133,9 +133,7 @@ hora_inicio = st.sidebar.time_input("Start hour", inicio_defecto_local.time())
 fecha_fin = st.sidebar.date_input("Date End", ahora_local.date())
 hora_fin = st.sidebar.time_input("End Hour", ahora_local.time())
 
-# ===========================================================
-# CALCULAR TIMESTAMPS
-# ===========================================================
+
 # ===========================================================
 # CALCULAR TIMESTAMPS
 # ===========================================================
@@ -153,12 +151,21 @@ if usar_real_time:
         f"Realtime mode ON (last {REALTIME_HOURS}h, refresh {refresh_seconds}s)"
     )
 else:
-    # Respeta exactamente las fechas y horas que el usuario selecciona
-    dt_inicio_local = zona_local.localize(datetime.combine(fecha_inicio, hora_inicio))
-    dt_fin_local = zona_local.localize(datetime.combine(fecha_fin, hora_fin))
-
-    if dt_fin_local <= dt_inicio_local:
-        st.error("End datetime must be later than start datetime.")
+    # --- construir datetimes naive ---
+    dt_inicio_naive = datetime.combine(fecha_inicio, hora_inicio)
+    dt_fin_naive = datetime.combine(fecha_fin, hora_fin)
+    
+    # --- localizarlos de forma SEGURA ---
+    dt_inicio_local = zona_local.localize(dt_inicio_naive, is_dst=None)
+    dt_fin_local = zona_local.localize(dt_fin_naive, is_dst=None)
+    
+    # --- validación estricta ---
+    if dt_inicio_local >= dt_fin_local:
+        st.error(
+            f"⚠️ Invalid datetime range\n"
+            f"Start: {dt_inicio_local}\n"
+            f"End: {dt_fin_local}"
+        )
         st.stop()
 
 
