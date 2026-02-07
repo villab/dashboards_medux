@@ -550,9 +550,20 @@ else:
                         num_filas = len(df_grupo)
                         # Ajustar altura de acuerdo a la cantidad de filas (cada fila ≈ 35 px, margen mínimo 150 px)
                         altura_tabla = max(150, num_filas * 35)
+
+                        df_tabla = df_grupo[["Estado", "Sonda", "ISP", "Último reporte"]].rename(
+                            columns={
+                                "Estado": "Status",
+                                "Sonda": "Probe ID",
+                                "ISP": "Operator",
+                                "Último reporte": "Last Report"
+                            }
+                        )
+
+
                         
                         st.dataframe(
-                            df_grupo[["Estado", "Sonda", "ISP", "Último reporte"]],
+                            df_tabla,
                             use_container_width=True,
                             hide_index=True,
                             height=len(df_grupo) * 48 + 38,
