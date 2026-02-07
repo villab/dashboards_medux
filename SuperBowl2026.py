@@ -128,10 +128,35 @@ inicio_defecto_local = ahora_local - timedelta(days=1)
 st.sidebar.markdown("---")
 st.sidebar.header("Date")
 
-fecha_inicio = st.sidebar.date_input("Date Start", inicio_defecto_local.date())
-hora_inicio = st.sidebar.time_input("Start hour", inicio_defecto_local.time())
-fecha_fin = st.sidebar.date_input("Date End", ahora_local.date())
-hora_fin = st.sidebar.time_input("End Hour", ahora_local.time())
+if "fecha_inicio" not in st.session_state:
+    ahora_local = datetime.now(zona_local)
+    inicio_defecto_local = ahora_local - timedelta(days=1)
+
+    st.session_state.fecha_inicio = inicio_defecto_local.date()
+    st.session_state.hora_inicio = inicio_defecto_local.time()
+    st.session_state.fecha_fin = ahora_local.date()
+    st.session_state.hora_fin = ahora_local.time()
+
+
+fecha_inicio = st.sidebar.date_input(
+    "Date Start",
+    key="fecha_inicio"
+)
+
+hora_inicio = st.sidebar.time_input(
+    "Start hour",
+    key="hora_inicio"
+)
+
+fecha_fin = st.sidebar.date_input(
+    "Date End",
+    key="fecha_fin"
+)
+
+hora_fin = st.sidebar.time_input(
+    "End Hour",
+    key="hora_fin"
+)
 
 
 # ===========================================================
