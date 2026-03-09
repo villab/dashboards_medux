@@ -920,18 +920,6 @@ else:
 
 
 
-    #------------------ Voice Out ----------------------
-    st.header("Voice")
-
-    df_voice = df_kpi[df_kpi["test"] == "voice-out"]
-    if not df_voice.empty:
-        grafica_kpi(df_voice, "callSetUpTimeL3", "Call set up time (ms)")
-    
-        grafica_kpi(
-            df_voice,
-            "callSetUpSuccessL3",
-            "Call set up success"
-        )
 
 # ================== Voice Out ==================
     st.header("Voice")
