@@ -977,6 +977,6 @@ else:
     df_twitter = df_kpi[df_kpi["test"] == "twitter-download"]
     if not df_twitter.empty:
         grafica_kpi(df_ping, "connectionTime", "Connection Time (ms)")
-        grafica_kpi(df_ping, "loadTime", "Load Time (ms)")
+        grafica_kpi(df_ping, "loadingTime", "Load Time (ms)")
        
 
