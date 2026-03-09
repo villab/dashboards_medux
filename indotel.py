@@ -976,7 +976,7 @@ else:
     st.header("Social Media")
     df_twitter = df_kpi[df_kpi["test"] == "twitter-download"]
     if not df_twitter.empty:
-        grafica_kpi(df_ping, "connectionTime", "Connection Time (ms)")
-        grafica_kpi(df_ping, "loadingTime", "Load Time (ms)")
+        grafica_kpi(df_twitter, "connectionTime", "Connection Time (ms)")
+        grafica_kpi(df_twitter, "loadingTime", "Load Time (ms)")
        
 
