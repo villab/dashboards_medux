@@ -83,8 +83,8 @@ st.sidebar.header("Types of tests")
 
 programas = st.sidebar.multiselect(
     "Select tests",
-    ["confess-chrome", "youtube-test", "ping-test", "network", "voice-out", "cloud-download", "cloud-upload"],
-    default=["confess-chrome", "youtube-test", "ping-test", "voice-out", "cloud-download", "cloud-upload"]
+    ["confess-chrome", "youtube-test", "ping-test", "network", "voice-out", "cloud-download", "cloud-upload", "twitter-download", "facebook-download"],
+    default=["confess-chrome", "youtube-test", "ping-test", "voice-out", "cloud-download", "cloud-upload","twitter-download", "facebook-download"]
 )
 
 # ===========================================================
@@ -101,7 +101,7 @@ tz_map = {
 tz_label = st.sidebar.selectbox(
     "Date time zone",
     list(tz_map.keys()),
-    index=0  # Los Angeles por defecto
+    index=0  # posicion 0 por defecto
 )
 
 zona_local = pytz.timezone(tz_map[tz_label])
@@ -972,7 +972,11 @@ else:
     
 
 
-
-
-
+#--------------- SOCIAL MEDIA ----------------
+    st.header("Social Media")
+    df_ping = df_kpi[df_kpi["test"] == "twitter-download"]
+    if not df_ping.empty:
+        grafica_kpi(df_ping, "connectionTime", "Connection Time (ms)")
+        grafica_kpi(df_ping, "loadTime", "Load Time (ms)")
+       
 
