@@ -762,102 +762,99 @@ else:
 #------------------------------------------########
 #--------------GRAFICA DE KPIS POR ISP
 
-def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean",color_by="isp"):
-    if not all(col in df.columns for col in ["dateStart", y_field, "isp"]):
-        st.warning(f"⚠️ No se encontró la columna '{y_field}' en los datos.")
+def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean", color_by="isp"):
+    # 1. Validaciones de seguridad
+    if df is None or df.empty:
+        return
+    if not all(col in df.columns for col in ["dateStart", y_field, color_by]):
         return
 
     df_g = df.copy()
 
-    # --- Fecha ---
-    df_g["dateStart"] = pd.to_datetime(df_g["dateStart"], errors="coerce").dt.tz_localize(None)
+    # 2. Preparación de datos (Limpieza total)
+    df_g["dateStart"] = pd.to_datetime(df_g["dateStart"], errors="coerce")
+    if df_g["dateStart"].dt.tz is not None:
+        df_g["dateStart"] = df_g["dateStart"].dt.tz_localize(None)
 
-    # --- KPI numérico ---
     df_g[y_field] = pd.to_numeric(df_g[y_field], errors="coerce")
+    
+    # IMPORTANTE: Eliminar filas donde el KPI sea NaN antes de agrupar
+    df_g = df_g.dropna(subset=["dateStart", y_field])
 
-    # --- Limpiar ---
-    df_g = df_g.dropna(subset=["dateStart", y_field, "isp"])
     if df_g.empty:
-        st.info(f"ℹ️ No hay datos válidos para {titulo}")
         return
 
-    # --- Agregación segura ---
+    # 3. Agregación Multi-Nivel (Para que no se pierdan datos si hay varios targets)
+    # Primero agrupamos por el color (ISP o Target) y por el tiempo exacto, 
+    # luego aplicamos el resample para suavizar la línea.
     df_agg_list = []
-    for key, group in df_g.groupby(color_by):
-        grp = (
-            group
-            .set_index("dateStart")
-            .resample(freq)[y_field]
+    
+    for name, group in df_g.groupby(color_by):
+        # Ordenamos por fecha
+        grp = group.sort_values("dateStart")
+        
+        # Agrupamos por la frecuencia deseada
+        # .mean() aquí promediará todos los targets de ese ISP en ese rango de tiempo
+        grp_resampled = (
+            grp.set_index("dateStart")[y_field]
+            .resample(freq)
             .mean()
             .reset_index()
         )
-        grp[color_by] = key
-        df_agg_list.append(grp)
+        
+        grp_resampled[color_by] = name
+        df_agg_list.append(grp_resampled)
 
+    if not df_agg_list:
+        return
+        
+    df_final = pd.concat(df_agg_list, ignore_index=True)
+    
+    # Eliminamos los huecos generados por el resample que no tengan datos
+    df_final = df_final.dropna(subset=[y_field])
 
-    df_agg = pd.concat(df_agg_list, ignore_index=True)
+    # 4. Configuración de colores dinámica
+    color_map_local = {
+        "altice": "#1260F0",
+        "claro do": "#DC0612",
+        "viva": "#94C915"
+    }
 
-    # --- Plot ---
+    # 5. Construcción del gráfico
     fig = px.line(
-        df_agg,
+        df_final,
         x="dateStart",
         y=y_field,
         color=color_by,
-        hover_name=color_by,
         markers=True,
         title=titulo,
-        color_discrete_map=color_map if color_by == "isp" else None,
-        labels={
-            "isp": "ISP",
-            color_by: "ISP"
-        }
+        color_discrete_map=color_map_local if color_by == "isp" else px.colors.qualitative.Safe,
+        template="plotly_white"
     )
 
+    # 6. Forzar visibilidad (Ajustes de Plotly)
+    fig.update_traces(connectgaps=True)
+    
+    # Cambiar nombres de leyenda si es ISP
     if color_by == "isp":
-        fig.for_each_trace(
-            lambda t: t.update(
-                name=ISP_NAME_MAP.get(t.name, t.name),
-                legendgroup=ISP_NAME_MAP.get(t.legendgroup, t.legendgroup),
-                hovertemplate=t.hovertemplate.replace(
-                    t.name,
-                    ISP_NAME_MAP.get(t.name, t.name)
-                ) if t.hovertemplate else None
-            )
-        )
+        fig.for_each_trace(lambda t: t.update(
+            name=ISP_NAME_MAP.get(t.name.lower(), t.name)
+        ))
 
-    Y_AXIS_LABELS = {
-        "callSetUpTimeL3": "Call setup time (ms)",
-        "callSetUpSuccessL3": "Call setup success (%)"
-    }
     fig.update_layout(
-        xaxis_title="Date",
-        yaxis_title=Y_AXIS_LABELS.get(y_field, titulo),
+        xaxis_title="Fecha/Hora",
+        yaxis_title=y_field,
         hovermode="x unified",
-        height=450
+        height=450,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
     )
 
-    if y_field == "callSetUpSuccessL3":
-        fig.update_yaxes(
-            tickformat=".0%",
-            range=[0, 1.01]    
-        )
-
-
-    if color_by == "target":
-        fig.update_layout(
-            legend=dict(
-                orientation="h",
-                yanchor="top",
-                y=1.12,
-                xanchor="center",
-                x=0.5,
-                title_text=""
-            ),
-            margin=dict(t=100)
-    )
+    # Asegurar que el eje Y se vea bien
+    fig.update_yaxes(rangemode="tozero", showgrid=True, gridcolor='LightGray')
+    fig.update_xaxes(showgrid=True, gridcolor='LightGray')
 
     st.plotly_chart(fig, use_container_width=True)
-
+    
 
 # Detectar columna de sonda
 col_probe = next(
