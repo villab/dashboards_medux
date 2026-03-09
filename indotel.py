@@ -951,6 +951,21 @@ else:
         grafica_kpi(df_youtube, "speedDl", "Youtube Speed DL (Mbps)")
         grafica_kpi(df_youtube, "bufferingTime", "Buffering Time (ms)")
 
+    
+#--------------- SOCIAL MEDIA ----------------
+    st.header("Social Media")
+    st.subheader("Twitter")
+    df_twitter = df_kpi[df_kpi["test"] == "twitter-download"]
+    if not df_twitter.empty:
+        grafica_kpi(df_twitter, "connectionTime", "Connection Time (ms)")
+        grafica_kpi(df_twitter, "loadingTime", "Load Time (ms)")
+     st.subheader("Facebook")  
+    df_facebook = df_kpi[df_kpi["test"] == "facebook-download"]
+    if not df_facebook.empty:
+        grafica_kpi(df_facebook, "connectionTime", "Connection Time (ms)")
+        grafica_kpi(df_facebook, "loadingTime", "Load Time (ms)")
+
+    
 
     st.header("KPI Summary by Operator")
 
@@ -971,12 +986,4 @@ else:
         )
     
 
-
-#--------------- SOCIAL MEDIA ----------------
-    st.header("Social Media")
-    df_twitter = df_kpi[df_kpi["test"] == "twitter-download"]
-    if not df_twitter.empty:
-        grafica_kpi(df_twitter, "connectionTime", "Connection Time (ms)")
-        grafica_kpi(df_twitter, "loadingTime", "Load Time (ms)")
-       
 
