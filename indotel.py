@@ -48,7 +48,7 @@ KPI_DEFINITION = {
 # 🧠 CONFIGURACIÓN INICIAL
 # ===========================================================
 st.set_page_config(page_title="Medux Monitoring Dashboard", layout="wide")
-st.markdown("### SUPER BOWL 2026 - PROBES MONITOR")
+st.markdown("### INDOTEL 2026 - PROBES MONITOR")
 
 # ===========================================================
 # 🔐 TOKEN Y PROBES DESDE SECRETS
