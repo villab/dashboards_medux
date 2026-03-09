@@ -11,9 +11,9 @@ import time
 #Diccionario ISP
 
 ISP_NAME_MAP = {
-    "att_us": "AT&T",
-    "t-mobile_us": "T-Mobile",
-    "verizon_wireless_us": "Verizon",
+    "altice": "Altice",
+    "claro do": "Claro",
+    "viva": "Viva",
 }
 
 #-----------Definicion KPIs para tabla resumen------
@@ -94,8 +94,7 @@ st.sidebar.markdown("---")
 st.sidebar.header("Time Zone")
 
 tz_map = {
-    "Los Angeles (PT)": "America/Los_Angeles",
-    "Dallas (CT)": "America/Chicago",
+    "Santo Domingo" : "America/Santo_Domingo",
     "UTC": "UTC",
 }
 
@@ -703,9 +702,9 @@ if not df.empty and all(c in df.columns for c in ["latitude", "longitude", "isp"
 
         # 🎨 Colores fijos por operador (agrega o ajusta según tus ISPs)
         color_map = {
-            "t-mobile_us": "#E20074",    # Magenta
-            "att_us": "#00A8E0",        # Azul
-            "verizon_wireless_us": "#ff0000",     # Rojo
+            "altice": "#1260F0",    
+            "claro do": "#DC0612",        
+            "viva": "#94C915",     
             "Claro": "#D52B1E",       # Rojo intenso
             "Movistar": "#00A9E0",    # Celeste
             "Liberty": "#6F2DA8",     # Púrpura
