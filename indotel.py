@@ -763,119 +763,103 @@ else:
 #--------------GRAFICA DE KPIS POR ISP
 
 def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean", color_by="isp"):
-    # 1. VALIDACIONES DE SEGURIDAD
+    # 1. VALIDACIÓN RADICAL
     if df is None or df.empty:
         return
     
-    # Verificar que las columnas mínimas existan
-    columnas_actuales = df.columns.tolist()
-    if not all(col in columnas_actuales for col in ["dateStart", y_field, color_by]):
+    # Asegurar que las columnas existen y no tienen nulos en la categoría
+    if y_field not in df.columns or "dateStart" not in df.columns or color_by not in df.columns:
         return
 
-    # 2. PREPARACIÓN Y LIMPIEZA PROFUNDA
     df_plot = df.copy()
     
-    # Convertir fechas a formato plano (tz-naive) para máxima compatibilidad con Plotly
+    # 2. LIMPIEZA DE TIPOS (Evita el TypeError de Plotly)
+    # Forzamos que la columna de color sea SIEMPRE string y no tenga nulos
+    df_plot[color_by] = df_plot[color_by].fillna("Unknown").astype(str)
+    
+    # Fechas
     df_plot["dateStart"] = pd.to_datetime(df_plot["dateStart"], errors="coerce")
     if df_plot["dateStart"].dt.tz is not None:
-        df_plot["dateStart"] = df_plot["dateStart"].dt.tz_convert(None)
+        df_plot["dateStart"] = df_plot["dateStart"].dt.tz_localize(None)
     
-    # Convertir KPI a numérico y eliminar filas basura
+    # KPI numérico
     df_plot[y_field] = pd.to_numeric(df_plot[y_field], errors="coerce")
-    df_plot = df_plot.dropna(subset=["dateStart", y_field, color_by])
+    
+    # Quitar filas donde el KPI o la Fecha fallaron
+    df_plot = df_plot.dropna(subset=["dateStart", y_field])
 
     if df_plot.empty:
         return
 
-    # 3. AGRUPACIÓN INTELIGENTE (Soluciona el problema de la gráfica vacía arriba)
-    # Redondeamos el tiempo para agrupar puntos cercanos
+    # 3. AGRUPACIÓN SEGURA
     try:
-        # Si el rango de tiempo es muy grande, ajustamos la frecuencia automáticamente
-        rango = df_plot["dateStart"].max() - df_plot["dateStart"].min()
-        if rango > pd.Timedelta(days=3):
-            freq = "1h"
+        # Redondeo manual para agrupar puntos
+        df_plot["time_idx"] = df_plot["dateStart"].dt.floor(freq)
         
-        # Agrupamos por el criterio (ISP o Target) y el tiempo redondeado
-        df_plot["time_group"] = df_plot["dateStart"].dt.floor(freq)
-        
+        # Agrupamos por color y tiempo
         df_agg = (
-            df_plot.groupby([color_by, "time_group"], as_index=False)[y_field]
+            df_plot.groupby([color_by, "time_idx"], as_index=False)[y_field]
             .mean()
-            .rename(columns={"time_group": "dateStart"})
+            .rename(columns={"time_idx": "dateStart"})
             .sort_values("dateStart")
         )
-    except Exception as e:
-        # Si falla el redondeo, usamos los datos tal cual
+    except:
+        # Si falla el agrupamiento, usamos los datos limpios directamente
         df_agg = df_plot.sort_values("dateStart")
 
-    # 4. CONFIGURACIÓN DE COLORES (MAPA OFICIAL)
-    color_map_local = {
-        "altice": "#1260F0",
-        "claro do": "#DC0612",
-        "viva": "#94C915",
-        "Altice": "#1260F0",
-        "Claro": "#DC0612",
-        "Viva": "#94C915"
+    # 4. MAPA DE COLORES DINÁMICO
+    # Si es ISP usamos los tuyos, si es Target dejamos que Plotly elija pero sin romperse
+    color_map_final = {
+        "altice": "#1260F0", "Altice": "#1260F0",
+        "claro do": "#DC0612", "Claro": "#DC0612",
+        "viva": "#94C915", "Viva": "#94C915"
     }
-
-    # 5. CREACIÓN DEL GRÁFICO (PLOTLY EXPRESS)
-    fig = px.line(
-        df_agg,
-        x="dateStart",
-        y=y_field,
-        color=color_by,
-        markers=True,
-        title=titulo,
-        color_discrete_map=color_map_local if color_by == "isp" else px.colors.qualitative.Safe,
-        template="plotly_white"
-    )
-
-    # 6. TRUCOS DE RENDERIZADO (Para que no salgan puntos sueltos)
-    fig.update_traces(connectgaps=True, line=dict(width=2.5))
     
-    # Traducir nombres en la leyenda si el color es por ISP
-    if color_by == "isp":
-        fig.for_each_trace(lambda t: t.update(
-            name=ISP_NAME_MAP.get(t.name.lower(), t.name),
-            legendgroup=ISP_NAME_MAP.get(t.name.lower(), t.name)
-        ))
+    # Solo aplicamos el mapa si la columna es de ISP
+    use_map = color_map_final if color_by.lower() in ["isp", "provider", "operator"] else None
 
-    # 7. ESTÉTICA DE EJES Y LEYENDAS
-    # Etiquetas bonitas para el eje Y
-    Y_LABELS = {
-        "callSetUpTimeL3": "Call setup time (ms)",
-        "callSetUpSuccessL3": "Success Rate (%)",
-        "loadingTime": "Loading time (ms)",
-        "speedDl": "Speed (Mbps)",
-        "speedUl": "Speed (Mbps)",
-        "avgLatency": "Latency (ms)"
-    }
-
-    fig.update_layout(
-        xaxis_title="Tiempo",
-        yaxis_title=Y_LABELS.get(y_field, y_field),
-        hovermode="x unified",
-        height=450,
-        margin=dict(l=10, r=10, t=60, b=10),
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="center",
-            x=0.5,
-            title_text=""
+    # 5. CONSTRUCCIÓN DEL GRÁFICO (Cuidado con los parámetros)
+    try:
+        fig = px.line(
+            df_agg,
+            x="dateStart",
+            y=y_field,
+            color=color_by,
+            markers=True,
+            title=titulo,
+            color_discrete_map=use_map,
+            template="plotly_white",
+            # Esto previene el error m.val_map[val] al forzar el orden de las leyendas
+            category_orders={color_by: sorted(df_agg[color_by].unique().tolist())}
         )
-    )
 
-    # Ajuste para ejes porcentuales (como el de Voice Success)
-    if "Success" in titulo or y_field == "callSetUpSuccessL3":
-        fig.update_yaxes(range=[0, 105], ticksuffix="%")
-    else:
-        fig.update_yaxes(rangemode="tozero")
+        # 6. ESTÉTICA Y CONECTIVIDAD
+        fig.update_traces(connectgaps=True)
+        
+        # Traducir leyendas de ISP si aplica
+        if color_by.lower() in ["isp", "provider"]:
+            fig.for_each_trace(lambda t: t.update(
+                name=ISP_NAME_MAP.get(t.name.lower(), t.name)
+            ))
 
-    # 8. RENDERIZADO FINAL EN STREAMLIT
-    st.plotly_chart(fig, use_container_width=True)
+        fig.update_layout(
+            xaxis_title="Tiempo",
+            yaxis_title=y_field,
+            hovermode="x unified",
+            height=400,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, title_text="")
+        )
+        
+        # Ajuste de escala
+        if "Success" in titulo or "Success" in y_field:
+            fig.update_yaxes(range=[0, 105])
+        else:
+            fig.update_yaxes(rangemode="tozero")
 
+        st.plotly_chart(fig, use_container_width=True)
+
+    except Exception as e:
+        st.error(f"Error renderizando {titulo}: {e}")
 # Filtrar dataframe según Backpack seleccionado
 df_kpi = filtrar_por_backpack(df, backpack_option, col_probe)
 
