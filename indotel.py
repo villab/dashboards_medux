@@ -933,7 +933,26 @@ else:
             "Call set up success"
         )
 
-
+# ================== Voice Out ==================
+    st.header("Voice")
+    
+    df_voice = df_kpi[df_kpi["test"] == "voice-out"]
+    if not df_voice.empty:
+        # 1. Grafica de tiempo (ms) - Se queda igual
+        grafica_kpi(df_voice, "callSetUpTimeL3", "Call set up time (ms)")
+        
+        # 2. Grafica de éxito (%) - AJUSTE AQUÍ MISMO
+        df_voice_pct = df_voice.copy()
+        
+        # Solo multiplicamos si los datos vienen en formato 0-1
+        if df_voice_pct["callSetUpSuccessL3"].max() <= 1.0:
+            df_voice_pct["callSetUpSuccessL3"] = df_voice_pct["callSetUpSuccessL3"] * 100
+            
+        grafica_kpi(
+            df_voice_pct, 
+            "callSetUpSuccessL3", 
+            "Call set up success (%)" # Cambiamos el título para que la función sepa que es porcentaje
+        )
 
     # ================== Streaming ==================
     st.header("Streaming")
