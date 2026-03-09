@@ -763,66 +763,53 @@ else:
 #--------------GRAFICA DE KPIS POR ISP
 
 def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean", color_by="isp"):
-    # 1. Validaciones de seguridad
+    # 1. Validaciones básicas
     if df is None or df.empty:
         return
     if not all(col in df.columns for col in ["dateStart", y_field, color_by]):
+        st.write(f"⚠️ Columnas faltantes para {titulo}") # Debug ligero
         return
 
     df_g = df.copy()
 
-    # 2. Preparación de datos (Limpieza total)
+    # 2. Limpieza de Fechas y Números
     df_g["dateStart"] = pd.to_datetime(df_g["dateStart"], errors="coerce")
     if df_g["dateStart"].dt.tz is not None:
         df_g["dateStart"] = df_g["dateStart"].dt.tz_localize(None)
 
     df_g[y_field] = pd.to_numeric(df_g[y_field], errors="coerce")
-    
-    # IMPORTANTE: Eliminar filas donde el KPI sea NaN antes de agrupar
     df_g = df_g.dropna(subset=["dateStart", y_field])
 
     if df_g.empty:
         return
 
-    # 3. Agregación Multi-Nivel (Para que no se pierdan datos si hay varios targets)
-    # Primero agrupamos por el color (ISP o Target) y por el tiempo exacto, 
-    # luego aplicamos el resample para suavizar la línea.
-    df_agg_list = []
-    
-    for name, group in df_g.groupby(color_by):
-        # Ordenamos por fecha
-        grp = group.sort_values("dateStart")
-        
-        # Agrupamos por la frecuencia deseada
-        # .mean() aquí promediará todos los targets de ese ISP en ese rango de tiempo
-        grp_resampled = (
-            grp.set_index("dateStart")[y_field]
-            .resample(freq)
-            .mean()
-            .reset_index()
-        )
-        
-        grp_resampled[color_by] = name
-        df_agg_list.append(grp_resampled)
+    # 3. Lógica de Agregación: 
+    # Si hay pocos datos, NO hacemos resample (evita que se rompa)
+    # Si hay muchos datos, promediamos para que la línea no sea un caos
+    try:
+        if len(df_g) > 10: 
+            df_agg = (
+                df_g.groupby([color_by, pd.Grouper(key="dateStart", freq=freq)])[y_field]
+                .mean()
+                .reset_index()
+                .dropna()
+            )
+        else:
+            df_agg = df_g.sort_values("dateStart")
+    except:
+        # Si el agrupamiento falla por cualquier razón, usamos los datos crudos
+        df_agg = df_g.sort_values("dateStart")
 
-    if not df_agg_list:
-        return
-        
-    df_final = pd.concat(df_agg_list, ignore_index=True)
-    
-    # Eliminamos los huecos generados por el resample que no tengan datos
-    df_final = df_final.dropna(subset=[y_field])
-
-    # 4. Configuración de colores dinámica
+    # 4. Mapa de colores manual (Altice, Claro, Viva)
     color_map_local = {
         "altice": "#1260F0",
         "claro do": "#DC0612",
         "viva": "#94C915"
     }
 
-    # 5. Construcción del gráfico
+    # 5. Construcción del gráfico con Plotly
     fig = px.line(
-        df_final,
+        df_agg,
         x="dateStart",
         y=y_field,
         color=color_by,
@@ -832,30 +819,27 @@ def grafica_kpi(df, y_field, titulo, freq="5min", agg_func="mean", color_by="isp
         template="plotly_white"
     )
 
-    # 6. Forzar visibilidad (Ajustes de Plotly)
+    # 6. Forzar que las líneas se unan aunque falten puntos intermedios
     fig.update_traces(connectgaps=True)
-    
-    # Cambiar nombres de leyenda si es ISP
+
+    # 7. Renombrar leyenda si es por ISP
     if color_by == "isp":
         fig.for_each_trace(lambda t: t.update(
             name=ISP_NAME_MAP.get(t.name.lower(), t.name)
         ))
 
+    # 8. Estética de ejes
     fig.update_layout(
-        xaxis_title="Fecha/Hora",
+        xaxis_title="Tiempo",
         yaxis_title=y_field,
         hovermode="x unified",
-        height=450,
+        height=400,
+        margin=dict(l=10, r=10, t=50, b=10),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
     )
 
-    # Asegurar que el eje Y se vea bien
-    fig.update_yaxes(rangemode="tozero", showgrid=True, gridcolor='LightGray')
-    fig.update_xaxes(showgrid=True, gridcolor='LightGray')
-
+    # 9. Mostrar
     st.plotly_chart(fig, use_container_width=True)
-    
-
 # Detectar columna de sonda
 col_probe = next(
     (c for c in ["probe", "probe_id", "probeId", "probes_id"] if c in df.columns),
