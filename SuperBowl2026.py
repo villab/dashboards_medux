@@ -162,7 +162,7 @@ hora_fin = st.sidebar.time_input(
 # ===========================================================
 # CALCULAR TIMESTAMPS
 # ===========================================================
-REALTIME_HOURS = 3
+REALTIME_HOURS = 8
 
 if usar_real_time:
    
