@@ -390,6 +390,7 @@ def asignar_distritos(df, distritos, col_lat="latitude", col_lon="longitude"):
     df["distrito"] = None
     df["canton"] = None
     df["provincia"] = None
+    df["codigo_dta"] = None
 
     if df.empty or not distritos:
         return df
@@ -420,6 +421,7 @@ def asignar_distritos(df, distritos, col_lat="latitude", col_lon="longitude"):
     df["distrito"] = idxs.apply(lambda i: distritos[int(i)]["distrito"] if pd.notna(i) else None)
     df["canton"] = idxs.apply(lambda i: distritos[int(i)]["canton"] if pd.notna(i) else None)
     df["provincia"] = idxs.apply(lambda i: distritos[int(i)]["provincia"] if pd.notna(i) else None)
+    df["codigo_dta"] = idxs.apply(lambda i: distritos[int(i)]["codigo_dta"] if pd.notna(i) else None)
     return df
 
 
@@ -441,8 +443,11 @@ def tabla_conteo_distrito(df, col_tech=None):
         return pd.DataFrame()
 
     df_valid["isp"] = df_valid["isp"].replace(ISP_NAME_MAP)
+    if "codigo_dta" in df_valid.columns:
+        df_valid["codigo_dta"] = df_valid["codigo_dta"].astype("Int64")
 
-    index_cols = ["distrito", "canton", "provincia"]
+    index_cols = ["codigo_dta", "distrito", "canton", "provincia"] if "codigo_dta" in df_valid.columns \
+        else ["distrito", "canton", "provincia"]
     usar_tech = bool(col_tech and col_tech in df_valid.columns)
     if usar_tech:
         df_valid[col_tech] = df_valid[col_tech].fillna("N/D").astype(str)
@@ -501,6 +506,7 @@ def construir_mapa(distritos, conteo_por_distrito, df_puntos=None, mostrar_punto
             "type": "Feature",
             "geometry": d["geo"],
             "properties": {
+                "codigo_dta": d.get("codigo_dta"),
                 "distrito": d["distrito"],
                 "canton": d["canton"],
                 "provincia": d["provincia"],
@@ -525,8 +531,8 @@ def construir_mapa(distritos, conteo_por_distrito, df_puntos=None, mostrar_punto
         data=feature_collection,
         style_function=estilo,
         tooltip=folium.GeoJsonTooltip(
-            fields=["distrito", "canton", "provincia", "count"],
-            aliases=["Distrito", "Canton", "Provincia", "Pruebas"],
+            fields=["codigo_dta", "distrito", "canton", "provincia", "count"],
+            aliases=["Codigo DTA", "Distrito", "Canton", "Provincia", "Pruebas"],
         ),
     ).add_to(m)
 
@@ -592,17 +598,45 @@ distritos = cargar_distritos_wfs(simplificacion_m)
 st.sidebar.markdown("---")
 st.sidebar.header("Filtrar por distrito")
 
+# --- Selector por Codigo DTA: al elegir uno, autocompleta Provincia/Canton/
+# Distrito de abajo via un callback (se ejecuta ANTES del rerun, por eso hay
+# que definir este selector primero en el script).
+codigos_por_valor = {d["codigo_dta"]: d for d in distritos if d.get("codigo_dta") is not None}
+codigos_disponibles = sorted(codigos_por_valor.keys())
+
+
+def _aplicar_codigo_dta():
+    codigo = st.session_state.get("poly_codigo_sel")
+    match = codigos_por_valor.get(codigo)
+    if match:
+        st.session_state["poly_provincia_sel"] = match["provincia"]
+        st.session_state["poly_canton_sel"] = match["canton"]
+        st.session_state["poly_distrito_sel"] = match["distrito"]
+
+
+codigo_sel = st.sidebar.selectbox(
+    "Codigo DTA",
+    ["Ninguno"] + codigos_disponibles,
+    format_func=lambda c: c if c == "Ninguno" else (
+        f"{c} — {codigos_por_valor[c]['distrito']} "
+        f"({codigos_por_valor[c]['canton']}, {codigos_por_valor[c]['provincia']})"
+    ),
+    key="poly_codigo_sel",
+    on_change=_aplicar_codigo_dta,
+    help="Selecciona un codigo DTA para autocompletar Provincia/Canton/Distrito.",
+)
+
 provincias_disponibles = sorted({
     d["provincia"] for d in distritos if d["provincia"] and d["provincia"] != "N/D"
 })
-provincia_sel = st.sidebar.selectbox("Provincia", ["Todas"] + provincias_disponibles)
+provincia_sel = st.sidebar.selectbox("Provincia", ["Todas"] + provincias_disponibles, key="poly_provincia_sel")
 
 cantones_disponibles = sorted({
     d["canton"] for d in distritos
     if d["canton"] and d["canton"] != "N/D"
     and (provincia_sel == "Todas" or d["provincia"] == provincia_sel)
 })
-canton_sel = st.sidebar.selectbox("Canton", ["Todos"] + cantones_disponibles)
+canton_sel = st.sidebar.selectbox("Canton", ["Todos"] + cantones_disponibles, key="poly_canton_sel")
 
 distritos_disponibles = sorted({
     d["distrito"] for d in distritos
@@ -610,7 +644,7 @@ distritos_disponibles = sorted({
     and (provincia_sel == "Todas" or d["provincia"] == provincia_sel)
     and (canton_sel == "Todos" or d["canton"] == canton_sel)
 })
-distrito_sel = st.sidebar.selectbox("Distrito", ["Todos"] + distritos_disponibles)
+distrito_sel = st.sidebar.selectbox("Distrito", ["Todos"] + distritos_disponibles, key="poly_distrito_sel")
 
 seleccion_actual = distritos_seleccionados(distritos, provincia_sel, canton_sel, distrito_sel)
 bounds_seleccion = bounds_para_seleccion(seleccion_actual, len(distritos))
