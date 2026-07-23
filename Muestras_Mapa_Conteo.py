@@ -19,11 +19,17 @@ Requisitos adicionales sobre el dashboard original (agregar a requirements.txt):
     shapely>=2.0
     pyproj
     folium
-    streamlit-folium
     branca
+
+Notas de rendimiento (ver seccion "OPTIMIZACION"):
+    - Los poligonos se simplifican y se cachean 24h (no se recalculan en cada rerun).
+    - El spatial join (punto-en-poligono) solo corre una vez por consulta nueva a la
+      API, no en cada rerun/click.
+    - El mapa se dibuja como UNA sola capa GeoJson (494 features en un solo layer)
+      en vez de 494 capas individuales, y se renderiza con components.html en vez
+      de streamlit-folium (evita el puente bidireccional que agrega latencia).
 """
 
-import json
 import time
 from datetime import datetime, timedelta
 
@@ -31,13 +37,13 @@ import pandas as pd
 import pytz
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 import folium
 import branca.colormap as cm
-from shapely.geometry import shape, Point
+from shapely.geometry import shape, Point, mapping
 from shapely.strtree import STRtree
 from shapely.ops import transform as shapely_transform
 from pyproj import Transformer
-from streamlit_folium import st_folium
 
 # ===========================================================
 # CONFIGURACION WFS (poligonos de distritos)
@@ -286,6 +292,12 @@ def obtener_datos_pag_no_cache(url, headers, body):
 # ===========================================================
 # WFS - CARGA DE POLIGONOS DE DISTRITOS (cache 24h, no cambian seguido)
 # ===========================================================
+# Tolerancia de simplificacion en grados (~0.0008 ~ 80-90 m). Solo afecta el
+# dibujo del mapa (mas rapido de renderizar); el spatial join usa la geometria
+# completa (sin simplificar) para no perder precision en los bordes.
+WFS_SIMPLIFY_TOLERANCE = 0.0008
+
+
 @st.cache_data(ttl=60 * 60 * 24, show_spinner="Cargando poligonos de distritos (WFS)...")
 def cargar_distritos_wfs():
     params = {
@@ -313,12 +325,17 @@ def cargar_distritos_wfs():
         if abs(minx) > 180 or abs(maxx) > 180 or abs(miny) > 90 or abs(maxy) > 90:
             geom = shapely_transform(transformer.transform, geom)
 
+        # Version simplificada SOLO para dibujar (menos vertices = mapa mucho
+        # mas liviano). Se precalcula aqui, una sola vez, y queda cacheada.
+        geom_simplificado = geom.simplify(WFS_SIMPLIFY_TOLERANCE, preserve_topology=True)
+
         distritos.append({
             "distrito": props.get("DISTRITO") or "N/D",
             "canton": props.get("CANTÓN") or "N/D",
             "provincia": props.get("PROVINCIA") or "N/D",
             "codigo_dta": props.get("CÓDIGO_DTA"),
-            "geometry": geom,
+            "geometry": geom,                      # precision completa (spatial join, bounds)
+            "geo": mapping(geom_simplificado),      # liviano (solo para el mapa)
         })
     return distritos
 
@@ -409,22 +426,45 @@ def construir_mapa(distritos, conteo_por_distrito, df_puntos=None, mostrar_punto
     colormap = cm.linear.YlOrRd_09.scale(0, max_count if max_count > 0 else 1)
     colormap.caption = "Pruebas por distrito"
 
+    # Una sola capa GeoJson con los 494 distritos (mucho mas rapido que 494
+    # capas individuales). El color/resaltado se resuelve via style_function
+    # leyendo las properties de cada feature.
+    features = []
     for d in distritos:
-        nombre = d["distrito"]
-        count = conteo_por_distrito.get(nombre, 0)
-        color = colormap(count) if count > 0 else "#eeeeee"
+        count = conteo_por_distrito.get(d["distrito"], 0)
         resaltado = (d["distrito"], d["canton"], d["provincia"]) in distritos_resaltados
-
-        folium.GeoJson(
-            data=d["geometry"].__geo_interface__,
-            style_function=lambda _feat, color=color, count=count, resaltado=resaltado: {
-                "fillColor": color,
-                "color": "#2b6cb0" if resaltado else "#555555",
-                "weight": 3 if resaltado else 0.6,
-                "fillOpacity": 0.65 if count > 0 else 0.15,
+        features.append({
+            "type": "Feature",
+            "geometry": d["geo"],
+            "properties": {
+                "distrito": d["distrito"],
+                "canton": d["canton"],
+                "provincia": d["provincia"],
+                "count": count,
+                "resaltado": resaltado,
             },
-            tooltip=f"{nombre} ({d['canton']}, {d['provincia']}) — {count} pruebas",
-        ).add_to(m)
+        })
+    feature_collection = {"type": "FeatureCollection", "features": features}
+
+    def estilo(feat):
+        p = feat["properties"]
+        count = p["count"]
+        color = colormap(count) if count > 0 else "#eeeeee"
+        return {
+            "fillColor": color,
+            "color": "#2b6cb0" if p["resaltado"] else "#555555",
+            "weight": 3 if p["resaltado"] else 0.4,
+            "fillOpacity": 0.65 if count > 0 else 0.12,
+        }
+
+    folium.GeoJson(
+        data=feature_collection,
+        style_function=estilo,
+        tooltip=folium.GeoJsonTooltip(
+            fields=["distrito", "canton", "provincia", "count"],
+            aliases=["Distrito", "Canton", "Provincia", "Pruebas"],
+        ),
+    ).add_to(m)
 
     if max_count > 0:
         colormap.add_to(m)
@@ -531,13 +571,16 @@ if should_fetch:
     if df_nuevo.empty:
         st.warning("No se recibieron datos.")
         st.stop()
+    # El spatial join corre UNA sola vez por consulta nueva (no en cada rerun:
+    # cambiar el filtro de distrito o el checkbox de puntos ya no lo recalcula).
+    df_nuevo = asignar_distritos(df_nuevo, distritos)
     st.session_state.poly_df = df_nuevo
     st.session_state.poly_last_fetch_ts = now
 
 df = st.session_state.poly_df
 
 # ===========================================================
-# SPATIAL JOIN + FILTRO POR DISTRITO SELECCIONADO
+# FILTRO POR DISTRITO SELECCIONADO (el spatial join ya se hizo al consultar)
 # ===========================================================
 st.caption(f"Poligonos de distritos cargados: {len(distritos)}")
 
@@ -545,8 +588,7 @@ if df.empty:
     st.info("👈 Ejecuta la consulta para ver el mapa y la tabla por distrito.")
     st.stop()
 
-df = asignar_distritos(df, distritos)
-sin_match = df["distrito"].isna().sum()
+sin_match = df["distrito"].isna().sum() if "distrito" in df.columns else 0
 if sin_match:
     st.caption(f"⚠️ {sin_match} de {len(df)} muestras sin coordenadas validas o fuera de los poligonos cargados.")
 
@@ -580,7 +622,9 @@ mapa = construir_mapa(
     distritos, conteo_por_distrito, df_puntos=df_filtrado, mostrar_puntos=mostrar_puntos,
     bounds=bounds_seleccion, distritos_resaltados=nombres_resaltados,
 )
-st_folium(mapa, use_container_width=True, height=600, returned_objects=[])
+# components.html (en vez de st_folium) evita el puente bidireccional JS<->Python
+# que streamlit-folium reconstruye en cada rerun; aqui es solo un iframe estatico.
+components.html(mapa._repr_html_(), height=620, scrolling=False)
 
 # ===========================================================
 # TABLA DE CONTEO POR DISTRITO x PROGRAM x ISP
