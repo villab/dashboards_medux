@@ -173,6 +173,13 @@ limite_filas = st.sidebar.number_input(
          "traer todo puede tardar varios minutos). Este limite corta la "
          "descarga cuando se alcanza, mostrando un aviso.",
 )
+solo_validas = st.sidebar.checkbox(
+    "Traer solo muestras validas (success=1, exitCode=0)",
+    value=False,
+    help="Filtra del lado del servidor (menos filas para transferir y "
+         "paginar = mas rapido), pero el conteo de pruebas por distrito ya "
+         "no incluira los intentos fallidos/de sonda con averia.",
+)
 
 # ===========================================================
 # CONFIGURACION API MEDUX
@@ -187,6 +194,11 @@ body = {
     "programs": programas,
     "probes": [str(p) for p in probes if pd.notna(p)],
 }
+if solo_validas:
+    body["conditions"] = [
+        {"parameters": [{"field": "success"}], "operator": "eq", "value": 1},
+        {"parameters": [{"field": "exitCode"}], "operator": "eq", "value": 0},
+    ]
 
 
 def flatten_results(raw_json):
@@ -250,6 +262,8 @@ def _descargar_paginado(url, headers, body, debug=False, limite_filas=0):
 
     diag = st.empty() if debug else None
     barra = st.progress(0, text="Descargando...") if debug else None
+    inicio_descarga = time.time()
+    ultima_peticion_ts = 0.0
 
     while True:
         if pit:
@@ -257,12 +271,20 @@ def _descargar_paginado(url, headers, body, debug=False, limite_filas=0):
         if search_after:
             payload["search_after"] = search_after
 
-        # La API limita a ~1 req/s; el PIT caduca en 1 minuto, asi que se
-        # pagina sin pausas largas entre peticiones.
-        if pagina > 1:
-            time.sleep(1.05)
+        # La API limita a ~1 req/s. Se mide desde el INICIO de la peticion
+        # anterior (no desde que termino): si una pagina de 10,000 filas ya
+        # tardo >=1s en responder -- lo normal -- no hace falta esperar nada
+        # antes de pedir la siguiente. Un sleep fijo de 1.05s DESPUES de cada
+        # respuesta (como antes) suma tiempo muerto innecesario encima del
+        # que ya tardo la propia peticion.
+        espera = 1.02 - (time.time() - ultima_peticion_ts)
+        if espera > 0:
+            time.sleep(espera)
 
+        t0 = time.time()
+        ultima_peticion_ts = t0
         r = requests.post(url, headers=headers, json=payload, timeout=60)
+        duracion_peticion = time.time() - t0
         if r.status_code != 200:
             st.error(f"Error API en pagina {pagina}: {r.status_code} — {r.text[:500]}")
             break
@@ -292,10 +314,13 @@ def _descargar_paginado(url, headers, body, debug=False, limite_filas=0):
         search_after = cursor.get("search_after")
 
         if diag is not None:
+            transcurrido = time.time() - inicio_descarga
+            velocidad = total_acumulado / transcurrido if transcurrido > 0 else 0
             diag.caption(
-                f"📥 Pagina {pagina}: {filas_en_pagina} filas "
-                f"(acumulado {total_acumulado} / total API reportado: {total_reportado_api}). "
-                f"¿vino cursor pit? {'si' if pit else 'NO'}"
+                f"📥 Pagina {pagina}: {filas_en_pagina} filas en {duracion_peticion:.1f}s "
+                f"(acumulado {total_acumulado:,} / total API reportado: {total_reportado_api}). "
+                f"¿vino cursor pit? {'si' if pit else 'NO'} — "
+                f"{transcurrido:.0f}s transcurridos, ~{velocidad:,.0f} filas/seg"
             )
         if barra is not None and total_reportado_api:
             objetivo = min(total_reportado_api, limite_filas) if limite_filas else total_reportado_api
@@ -482,13 +507,33 @@ def tabla_conteo_distrito(df, col_tech=None):
 # MAPA CHOROPLETH POR DISTRITO + PUNTOS OPCIONALES
 # ===========================================================
 def construir_mapa(distritos, conteo_por_distrito, df_puntos=None, mostrar_puntos=False,
-                    bounds=None, distritos_resaltados=None, paleta=None):
-    m = folium.Map(location=[9.7489, -83.7534], zoom_start=8, tiles="cartodbpositron")
+                    bounds=None, distritos_resaltados=None, paleta=None,
+                    usar_escalones=False, n_escalones=6, metodo_escalon="quantiles",
+                    redondear_escalones="int"):
+    # prefer_canvas=True: los puntos se dibujan en un solo <canvas> en vez de
+    # un nodo SVG por marcador -- clave para poder mostrar miles de muestras
+    # sin que el navegador se ponga lento al hacer pan/zoom.
+    m = folium.Map(location=[9.7489, -83.7534], zoom_start=8, tiles="cartodbpositron", prefer_canvas=True)
 
     distritos_resaltados = distritos_resaltados or set()
     max_count = max(conteo_por_distrito.values(), default=0)
     paleta = paleta or cm.linear.YlOrRd_09
-    colormap = paleta.scale(0, max_count if max_count > 0 else 1)
+
+    # Escalones (bins) en vez de degradado continuo: mejor cuando hay muchos
+    # distritos con pocas pruebas y unos pocos con muchas (caso tipico) --
+    # "quantiles" reparte los cortes segun la distribucion real de los datos
+    # en vez de repartir el rango 0-max en partes iguales.
+    counts_no_cero = [c for c in conteo_por_distrito.values() if c > 0]
+    if usar_escalones and counts_no_cero:
+        try:
+            colormap = paleta.to_step(
+                n=n_escalones, data=counts_no_cero,
+                method=metodo_escalon, round_method=redondear_escalones,
+            )
+        except Exception:
+            colormap = paleta.scale(0, max_count if max_count > 0 else 1)
+    else:
+        colormap = paleta.scale(0, max_count if max_count > 0 else 1)
     colormap.caption = "Pruebas por distrito"
 
     # Una sola capa GeoJson con los 494 distritos (mucho mas rapido que 494
@@ -541,18 +586,42 @@ def construir_mapa(distritos, conteo_por_distrito, df_puntos=None, mostrar_punto
         colormap.add_to(m)
 
     if mostrar_puntos and df_puntos is not None and not df_puntos.empty:
+        # Una sola capa GeoJson para TODOS los puntos (igual optimizacion que
+        # los distritos): con miles de CircleMarker individuales, cada uno
+        # generaba su propio objeto JS -- el HTML resultante se volvia enorme
+        # y lento de construir. Con una FeatureCollection + un solo marker
+        # "molde" reutilizado por Leaflet, el mismo volumen de puntos se
+        # arma muchisimo mas rapido y pesa una fraccion del HTML.
+        punto_features = []
         for _, row in df_puntos.iterrows():
             lat, lon = row.get("latitude"), row.get("longitude")
             if pd.isna(lat) or pd.isna(lon):
                 continue
             isp_label = ISP_NAME_MAP.get(row.get("isp"), row.get("isp"))
-            folium.CircleMarker(
-                location=[float(lat), float(lon)],
-                radius=3,
-                color=ISP_COLOR_MAP.get(isp_label, "#333333"),
-                fill=True,
-                fill_opacity=0.8,
-                popup=f"{isp_label} · {row.get('test')} · {row.get('distrito')}",
+            punto_features.append({
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [float(lon), float(lat)]},
+                "properties": {
+                    "isp": isp_label,
+                    "test": row.get("test"),
+                    "distrito": row.get("distrito"),
+                    "color": ISP_COLOR_MAP.get(isp_label, "#333333"),
+                },
+            })
+
+        if punto_features:
+            def estilo_punto(feat):
+                color = feat["properties"]["color"]
+                return {"radius": 3, "fillColor": color, "color": color, "weight": 1, "fillOpacity": 0.8}
+
+            folium.GeoJson(
+                data={"type": "FeatureCollection", "features": punto_features},
+                marker=folium.CircleMarker(radius=3, fill=True),
+                style_function=estilo_punto,
+                tooltip=folium.GeoJsonTooltip(
+                    fields=["isp", "test", "distrito"],
+                    aliases=["ISP", "Program", "Distrito"],
+                ),
             ).add_to(m)
 
     if bounds:
@@ -754,15 +823,25 @@ elif provincia_sel != "Todas":
 # ===========================================================
 st.markdown("#### 🗺️ Mapa por Distrito")
 
-LIMITE_PUNTOS_MAPA = 5000
+# Los puntos se dibujan como UNA sola capa GeoJson + canvas (no un CircleMarker
+# por muestra), asi que el techo real subio bastante: 50,000 puntos arman el
+# mapa en menos de 1s. Igual queda ajustable por si tu maquina/navegador
+# prefiere un limite mas bajo.
+limite_puntos_mapa = st.sidebar.number_input(
+    "Limite de puntos a dibujar en el mapa",
+    min_value=1000, max_value=200_000, value=30_000, step=5_000,
+    help="Los puntos se renderizan en una sola capa optimizada (canvas), asi "
+         "que soporta bastante mas que un CircleMarker por muestra. Si tu "
+         "navegador se siente lento al mover/hacer zoom, baja este numero.",
+)
 puntos_disponibles = len(df_filtrado)
-if puntos_disponibles > LIMITE_PUNTOS_MAPA:
+if puntos_disponibles > limite_puntos_mapa:
     st.checkbox("Mostrar muestras individuales sobre el mapa", value=False, disabled=True)
     st.caption(
         f"⚠️ Hay {puntos_disponibles:,} muestras en el rango/filtro actual — "
-        f"por encima de {LIMITE_PUNTOS_MAPA:,} no se dibujan puntos individuales "
-        f"(el navegador se congelaria). Angosta el rango de fechas o el filtro "
-        f"de distrito/canton/provincia para poder verlos."
+        f"por encima de {limite_puntos_mapa:,} (configurable en el sidebar) no "
+        f"se dibujan puntos individuales. Angosta el rango de fechas o el "
+        f"filtro de distrito/canton/provincia, o sube el limite."
     )
     mostrar_puntos = False
 else:
