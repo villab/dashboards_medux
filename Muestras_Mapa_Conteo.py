@@ -808,22 +808,28 @@ st.sidebar.markdown("---")
 st.sidebar.header("Filtrar por tecnologia y operador")
 if col_tech:
     tecnologias_disponibles = sorted(df[col_tech].dropna().astype(str).unique())
-    tecnologia_sel = st.sidebar.selectbox(
-        f"Tecnologia (columna '{col_tech}')", ["Todos"] + tecnologias_disponibles,
+    tecnologia_sel = st.sidebar.multiselect(
+        f"Tecnologia (columna '{col_tech}') — podes elegir varias",
+        tecnologias_disponibles,
+        help="Sin nada seleccionado = todas las tecnologias.",
     )
 else:
     st.sidebar.caption("No se encontro una columna de tecnologia en los datos traidos.")
-    tecnologia_sel = "Todos"
+    tecnologia_sel = []
 
-# --- Selector de Operador (ISP), mismo estilo que los demas selectores.
+# --- Selector de Operador (ISP), mismo estilo que Distrito/Tecnologia (multiselect).
 operadores_disponibles = sorted({
     ISP_NAME_MAP.get(v, v) for v in df["isp"].dropna().unique()
 }) if "isp" in df.columns else []
-operador_sel = st.sidebar.selectbox("Operador", ["Todos"] + operadores_disponibles)
+operador_sel = st.sidebar.multiselect(
+    "Operador — podes elegir varios", operadores_disponibles,
+    help="Sin nada seleccionado = todos los operadores.",
+)
 
 # Filtrar el dataframe segun Provincia/Canton/Distrito/Tecnologia/Operador.
 # "Distrito" (multiselect de tuplas distrito+canton+provincia) es el mas
 # especifico: si tiene algo seleccionado, manda sobre Provincia/Canton.
+# Tecnologia y Operador son multiselect: vacio = sin filtro (todos).
 mask = pd.Series(True, index=df.index)
 if distrito_sel:
     claves_sel = {f"{d}||{c}||{p}" for d, c, p in distrito_sel}
@@ -834,10 +840,10 @@ else:
         mask &= df["provincia"] == provincia_sel
     if canton_sel != "Todos":
         mask &= df["canton"] == canton_sel
-if col_tech and tecnologia_sel != "Todos":
-    mask &= df[col_tech].astype(str) == tecnologia_sel
-if operador_sel != "Todos" and "isp" in df.columns:
-    mask &= df["isp"].apply(lambda v: ISP_NAME_MAP.get(v, v)) == operador_sel
+if col_tech and tecnologia_sel:
+    mask &= df[col_tech].astype(str).isin(tecnologia_sel)
+if operador_sel and "isp" in df.columns:
+    mask &= df["isp"].apply(lambda v: ISP_NAME_MAP.get(v, v)).isin(operador_sel)
 df_filtrado = df[mask]
 
 if distrito_sel:
