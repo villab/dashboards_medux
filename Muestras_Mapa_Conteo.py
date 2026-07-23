@@ -121,36 +121,14 @@ tz_label = st.sidebar.selectbox("Zona horaria de fechas", list(tz_map.keys()), i
 zona_local = pytz.timezone(tz_map[tz_label])
 
 # ===========================================================
-# SIDEBAR - Actualizacion en tiempo real
-# ===========================================================
-# NOTA: se elimino el auto-refresh automatico (tanto el componente externo
-# streamlit-autorefresh, que fallaba en cargar sus assets JS, como el
-# <meta http-equiv="refresh">, que provoca recargas COMPLETAS de pagina no
-# cancelables -- si la app esta embebida en un iframe/portal, la sesion se
-# puede perder en cada recarga y el checkbox vuelve a su valor por defecto,
-# generando un loop de refresco infinito e imposible de apagar desde la UI).
-# El flujo ahora es manual: boton "Consultar API" para traer datos nuevos.
-st.sidebar.markdown("---")
-st.sidebar.header("Actualizacion")
-refresh_seconds = st.sidebar.slider(
-    "Antiguedad maxima antes de re-consultar (segundos)", 10, 300, 60,
-    help="Con 'Modo tiempo real' activo, el boton 'Consultar API' vuelve a "
-         "traer datos si la ultima consulta tiene mas de este tiempo. No hay "
-         "recarga automatica de pagina: hay que hacer clic en el boton.",
-)
-usar_real_time = st.sidebar.checkbox("Modo tiempo real", value=True)
-if usar_real_time:
-    st.sidebar.caption(
-        "Sin recarga automatica de pagina. Hace clic en 'Consultar API' "
-        "para traer datos frescos (o vuelve a traerlos solos si ya paso el "
-        "tiempo configurado arriba y interactuas con algo en la app)."
-    )
-
-REALTIME_HOURS = 8
-
-# ===========================================================
 # SIDEBAR - Rango manual de fechas
 # ===========================================================
+# NOTA: se elimino el modo "tiempo real" / auto-refresh (tanto el componente
+# externo streamlit-autorefresh, que fallaba en cargar sus assets JS, como el
+# <meta http-equiv="refresh">, que provoca recargas COMPLETAS de pagina no
+# cancelables -- si la app esta embebida en un iframe/portal, la sesion se
+# puede perder en cada recarga, generando un loop de refresco imposible de
+# apagar desde la UI). El flujo es manual: boton "Consultar API".
 st.sidebar.markdown("---")
 st.sidebar.header("Fecha")
 if "poly_fecha_inicio" not in st.session_state:
@@ -169,21 +147,15 @@ hora_fin = st.sidebar.time_input("Hora fin", key="poly_hora_fin")
 # ===========================================================
 # CALCULAR TIMESTAMPS
 # ===========================================================
-if usar_real_time:
-    ts_end = int(datetime.now(pytz.utc).timestamp() * 1000)
-    ts_start = int((datetime.now(pytz.utc) - timedelta(hours=REALTIME_HOURS)).timestamp() * 1000)
-    st.sidebar.caption(f"Modo tiempo real ON (ultimas {REALTIME_HOURS}h, refresco {refresh_seconds}s)")
-else:
-    dt_inicio_naive = datetime.combine(fecha_inicio, hora_inicio)
-    dt_fin_naive = datetime.combine(fecha_fin, hora_fin)
-    dt_inicio_local = zona_local.localize(dt_inicio_naive, is_dst=None)
-    dt_fin_local = zona_local.localize(dt_fin_naive, is_dst=None)
-    if dt_inicio_local >= dt_fin_local:
-        st.error(f"Rango de fechas invalido.\nInicio: {dt_inicio_local}\nFin: {dt_fin_local}")
-        st.stop()
-    ts_start = int(dt_inicio_local.astimezone(pytz.utc).timestamp() * 1000)
-    ts_end = int(dt_fin_local.astimezone(pytz.utc).timestamp() * 1000)
-    st.sidebar.caption("Rango manual activo")
+dt_inicio_naive = datetime.combine(fecha_inicio, hora_inicio)
+dt_fin_naive = datetime.combine(fecha_fin, hora_fin)
+dt_inicio_local = zona_local.localize(dt_inicio_naive, is_dst=None)
+dt_fin_local = zona_local.localize(dt_fin_naive, is_dst=None)
+if dt_inicio_local >= dt_fin_local:
+    st.error(f"Rango de fechas invalido.\nInicio: {dt_inicio_local}\nFin: {dt_fin_local}")
+    st.stop()
+ts_start = int(dt_inicio_local.astimezone(pytz.utc).timestamp() * 1000)
+ts_end = int(dt_fin_local.astimezone(pytz.utc).timestamp() * 1000)
 
 inicio_local_str = datetime.fromtimestamp(ts_start / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
 fin_local_str = datetime.fromtimestamp(ts_end / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
@@ -349,13 +321,8 @@ def _descargar_paginado(url, headers, body, debug=False, limite_filas=0):
 
 @st.cache_data(ttl=1800)
 def obtener_datos_pag(url, headers, body, debug=False, limite_filas=0):
-    """Descarga paginada completa (modo historico / cacheado 30 min)."""
-    return _descargar_paginado(url, headers, body, debug=debug, limite_filas=limite_filas)
-
-
-def obtener_datos_pag_no_cache(url, headers, body, debug=False, limite_filas=0):
-    """Descarga paginada completa SIN cache (modo tiempo real: siempre trae
-    todo el rango solicitado, no solo la primera pagina)."""
+    """Descarga paginada completa (cacheada 30 min: mismo rango/filtros =
+    no vuelve a golpear la API hasta que cambies algo o pase el TTL)."""
     return _descargar_paginado(url, headers, body, debug=debug, limite_filas=limite_filas)
 
 
@@ -457,9 +424,14 @@ def asignar_distritos(df, distritos, col_lat="latitude", col_lon="longitude"):
 
 
 # ===========================================================
-# TABLA DE CONTEO: Distrito x Program x ISP
+# TABLA DE CONTEO: Distrito (x Tecnologia) x ISP x Program
 # ===========================================================
-def tabla_conteo_distrito(df):
+def tabla_conteo_distrito(df, col_tech=None):
+    """Conteo de pruebas por distrito, con columnas agrupadas por ISP primero
+    y luego por program (mas facil comparar los mismos programs entre los 3
+    operadores). Si se pasa col_tech y existe en el df, se agrega como
+    dimension extra en el INDICE (una fila por distrito+tecnologia) para no
+    mezclar conteos de tecnologias distintas en una misma celda."""
     cols_needed = ["distrito", "test", "isp"]
     if df.empty or not all(c in df.columns for c in cols_needed):
         return pd.DataFrame()
@@ -470,20 +442,32 @@ def tabla_conteo_distrito(df):
 
     df_valid["isp"] = df_valid["isp"].replace(ISP_NAME_MAP)
 
+    index_cols = ["distrito", "canton", "provincia"]
+    usar_tech = bool(col_tech and col_tech in df_valid.columns)
+    if usar_tech:
+        df_valid[col_tech] = df_valid[col_tech].fillna("N/D").astype(str)
+        index_cols = index_cols + [col_tech]
+
     conteo = (
-        df_valid.groupby(["distrito", "canton", "provincia", "test", "isp"])
+        df_valid.groupby(index_cols + ["isp", "test"])
         .size()
         .reset_index(name="Pruebas")
     )
 
     pivot = conteo.pivot_table(
-        index=["distrito", "canton", "provincia"],
-        columns=["test", "isp"],
+        index=index_cols,
+        columns=["isp", "test"],
         values="Pruebas",
         fill_value=0,
         aggfunc="sum",
     )
-    pivot.columns = [f"{test} · {isp}" for test, isp in pivot.columns]
+    # Columnas agrupadas por ISP (bloque de ~6-7 programs por operador) en vez
+    # de por program -- con 3 operadores corriendo los mismos programs, es
+    # mas facil comparar leyendo un bloque por operador.
+    pivot = pivot.sort_index(axis=1, level=["isp", "test"])
+    pivot.columns = [f"{isp} · {test}" for isp, test in pivot.columns]
+    if usar_tech:
+        pivot = pivot.rename_axis(index={col_tech: "tecnologia"})
     pivot["Total"] = pivot.sum(axis=1)
     pivot = pivot.reset_index().sort_values("Total", ascending=False)
     return pivot
@@ -645,16 +629,10 @@ st.sidebar.markdown("---")
 debug_paginacion = st.sidebar.checkbox("🔧 Mostrar diagnostico de paginacion", value=True)
 
 now = time.time()
-manual_trigger = st.sidebar.button("Consultar API")
-time_trigger = usar_real_time and (now - st.session_state.poly_last_fetch_ts >= refresh_seconds)
-should_fetch = manual_trigger or time_trigger
+should_fetch = st.sidebar.button("Consultar API")
 
 if should_fetch:
-    raw = (
-        obtener_datos_pag_no_cache(API_URL, headers, body, debug=debug_paginacion, limite_filas=limite_filas)
-        if usar_real_time
-        else obtener_datos_pag(API_URL, headers, body, debug=debug_paginacion, limite_filas=limite_filas)
-    )
+    raw = obtener_datos_pag(API_URL, headers, body, debug=debug_paginacion, limite_filas=limite_filas)
     if not raw:
         st.warning("No se recibieron datos de la API.")
         st.stop()
@@ -670,6 +648,10 @@ if should_fetch:
 
 df = st.session_state.poly_df
 
+if st.session_state.poly_last_fetch_ts:
+    ultima = datetime.fromtimestamp(st.session_state.poly_last_fetch_ts, tz=zona_local)
+    st.caption(f"Ultima consulta a la API: {ultima.strftime('%Y-%m-%d %H:%M:%S')}")
+
 # ===========================================================
 # FILTRO POR DISTRITO SELECCIONADO (el spatial join ya se hizo al consultar)
 # ===========================================================
@@ -683,7 +665,23 @@ sin_match = df["distrito"].isna().sum() if "distrito" in df.columns else 0
 if sin_match:
     st.caption(f"⚠️ {sin_match} de {len(df)} muestras sin coordenadas validas o fuera de los poligonos cargados.")
 
-# Filtrar el dataframe segun el selector de Provincia/Canton/Distrito del sidebar
+# Deteccion dinamica de la columna de tecnologia (el nombre exacto puede variar
+# segun el perfil: "technology", "subtechnology", etc.)
+col_tech = next((c for c in ["technology", "subtechnology", "tech", "accessTechnology"] if c in df.columns), None)
+
+st.sidebar.markdown("---")
+st.sidebar.header("Filtrar por tecnologia")
+if col_tech:
+    tecnologias_disponibles = sorted(df[col_tech].dropna().astype(str).unique())
+    tecnologias_sel = st.sidebar.multiselect(
+        f"Tecnologia (columna '{col_tech}')", tecnologias_disponibles,
+        default=tecnologias_disponibles,
+    )
+else:
+    st.sidebar.caption("No se encontro una columna de tecnologia en los datos traidos.")
+    tecnologias_sel = None
+
+# Filtrar el dataframe segun el selector de Provincia/Canton/Distrito/Tecnologia
 mask = pd.Series(True, index=df.index)
 if provincia_sel != "Todas":
     mask &= df["provincia"] == provincia_sel
@@ -691,6 +689,8 @@ if canton_sel != "Todos":
     mask &= df["canton"] == canton_sel
 if distrito_sel != "Todos":
     mask &= df["distrito"] == distrito_sel
+if col_tech and tecnologias_sel is not None:
+    mask &= df[col_tech].astype(str).isin(tecnologias_sel)
 df_filtrado = df[mask]
 
 if distrito_sel != "Todos":
@@ -740,7 +740,7 @@ components.html(mapa._repr_html_(), height=620, scrolling=False)
 # TABLA DE CONTEO POR DISTRITO x PROGRAM x ISP
 # ===========================================================
 st.markdown("#### 📋 Conteo de pruebas por Distrito x Program x ISP")
-tabla = tabla_conteo_distrito(df_filtrado)
+tabla = tabla_conteo_distrito(df_filtrado, col_tech=col_tech)
 if tabla.empty:
     st.info("No hay suficientes datos (con coordenadas validas) para generar la tabla.")
 else:
