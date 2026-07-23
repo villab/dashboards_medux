@@ -898,7 +898,11 @@ mapa = construir_mapa(
 )
 # components.html (en vez de st_folium) evita el puente bidireccional JS<->Python
 # que streamlit-folium reconstruye en cada rerun; aqui es solo un iframe estatico.
-components.html(mapa._repr_html_(), height=620, scrolling=False)
+# OJO: usar get_root().render() (pagina completa) y NO _repr_html_(), que envuelve
+# el mapa en un div con "padding-bottom" de aspect-ratio fijo + un iframe anidado
+# -- esa combinacion no calzaba con el height=620 fijo y el mapa se veia
+# recortado/corrido hacia arriba, sin quedar centrado en Costa Rica.
+components.html(mapa.get_root().render(), height=620, scrolling=False)
 
 # ===========================================================
 # TABLA DE CONTEO POR DISTRITO x PROGRAM x ISP
