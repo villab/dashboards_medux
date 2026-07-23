@@ -292,14 +292,15 @@ def obtener_datos_pag_no_cache(url, headers, body):
 # ===========================================================
 # WFS - CARGA DE POLIGONOS DE DISTRITOS (cache 24h, no cambian seguido)
 # ===========================================================
-# Tolerancia de simplificacion en grados (~0.0008 ~ 80-90 m). Solo afecta el
-# dibujo del mapa (mas rapido de renderizar); el spatial join usa la geometria
-# completa (sin simplificar) para no perder precision en los bordes.
-WFS_SIMPLIFY_TOLERANCE = 0.0008
+# 1 grado ~ 111,320 m cerca del ecuador (Costa Rica ~9-11N, el error de esta
+# aproximacion es minimo). "tolerancia_m" se pasa como parametro para que el
+# cache se invalide solo cuando cambia el nivel de detalle, no en cada rerun.
+METROS_POR_GRADO = 111_320
 
 
 @st.cache_data(ttl=60 * 60 * 24, show_spinner="Cargando poligonos de distritos (WFS)...")
-def cargar_distritos_wfs():
+def cargar_distritos_wfs(tolerancia_m=10):
+    tolerancia_deg = (tolerancia_m / METROS_POR_GRADO) if tolerancia_m > 0 else 0
     params = {
         "service": "WFS",
         "version": "2.0.0",
@@ -327,7 +328,11 @@ def cargar_distritos_wfs():
 
         # Version simplificada SOLO para dibujar (menos vertices = mapa mucho
         # mas liviano). Se precalcula aqui, una sola vez, y queda cacheada.
-        geom_simplificado = geom.simplify(WFS_SIMPLIFY_TOLERANCE, preserve_topology=True)
+        # tolerancia_deg == 0 -> se usa la geometria completa (sin deformar).
+        geom_simplificado = (
+            geom.simplify(tolerancia_deg, preserve_topology=True)
+            if tolerancia_deg > 0 else geom
+        )
 
         distritos.append({
             "distrito": props.get("DISTRITO") or "N/D",
@@ -515,7 +520,15 @@ def bounds_para_seleccion(seleccionados, total_distritos):
 # ===========================================================
 # CARGA DE POLIGONOS + SELECTOR DE DISTRITO (sidebar)
 # ===========================================================
-distritos = cargar_distritos_wfs()
+st.sidebar.markdown("---")
+st.sidebar.header("Detalle del mapa")
+simplificacion_m = st.sidebar.slider(
+    "Simplificacion de poligonos (metros)",
+    min_value=0, max_value=100, value=10, step=5,
+    help="0 = geometria original del IGN (mas fiel, mapa mas pesado). "
+         "Valores altos deforman distritos pequenos/urbanos.",
+)
+distritos = cargar_distritos_wfs(simplificacion_m)
 
 st.sidebar.markdown("---")
 st.sidebar.header("Filtrar por distrito")
