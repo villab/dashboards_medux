@@ -99,13 +99,12 @@ st.sidebar.header("Tipos de prueba (programs)")
 programas = st.sidebar.multiselect(
     "Selecciona programs",
     [
-        "confess-chrome", "youtube-test", "ping-test", "network",
-        "voice-out", "cloud-download", "cloud-upload",
-        "http-down-test", "http-up-test", "voice-polqa", "sms-mo",
+        "http-down-burst-test", "http-upload-burst-test", "ping-test", "network",
+        "voice-out", "voice-polqa", "sms-mo",
     ],
     default=[
-        "confess-chrome", "youtube-test", "ping-test",
-        "voice-out", "cloud-download", "cloud-upload",
+        "ping-test", "http-down-burst-test", "http-upload-burst-test",
+        "voice-out", "voice-polqa", "sms-mo",
     ],
 )
 
@@ -434,10 +433,15 @@ def construir_mapa(distritos, conteo_por_distrito, df_puntos=None, mostrar_punto
     # Una sola capa GeoJson con los 494 distritos (mucho mas rapido que 494
     # capas individuales). El color/resaltado se resuelve via style_function
     # leyendo las properties de cada feature.
+    # OJO: la clave de conteo_por_distrito debe ser (distrito, canton, provincia).
+    # Costa Rica repite nombres de distrito en varios cantones (San Rafael,
+    # San Isidro, Concepcion, Mercedes, San Miguel, etc.) -- usar solo el
+    # nombre pintaba de mas los distritos "tocayos" sin muestras reales.
     features = []
     for d in distritos:
-        count = conteo_por_distrito.get(d["distrito"], 0)
-        resaltado = (d["distrito"], d["canton"], d["provincia"]) in distritos_resaltados
+        clave = (d["distrito"], d["canton"], d["provincia"])
+        count = conteo_por_distrito.get(clave, 0)
+        resaltado = clave in distritos_resaltados
         features.append({
             "type": "Feature",
             "geometry": d["geo"],
@@ -628,9 +632,15 @@ elif provincia_sel != "Todas":
 st.markdown("#### 🗺️ Mapa por Distrito")
 mostrar_puntos = st.checkbox("Mostrar muestras individuales sobre el mapa", value=False)
 
-conteo_por_distrito = (
-    df_filtrado.dropna(subset=["distrito"]).groupby("distrito").size().to_dict()
-)
+conteo_por_distrito = {
+    clave: cantidad
+    for clave, cantidad in (
+        df_filtrado.dropna(subset=["distrito"])
+        .groupby(["distrito", "canton", "provincia"])
+        .size()
+        .items()
+    )
+}
 mapa = construir_mapa(
     distritos, conteo_por_distrito, df_puntos=df_filtrado, mostrar_puntos=mostrar_puntos,
     bounds=bounds_seleccion, distritos_resaltados=nombres_resaltados,
@@ -647,6 +657,7 @@ tabla = tabla_conteo_distrito(df_filtrado)
 if tabla.empty:
     st.info("No hay suficientes datos (con coordenadas validas) para generar la tabla.")
 else:
+    st.caption(f"{len(tabla)} distrito(s) con muestras — si no ves todos, desplazate dentro de la tabla (scroll interno).")
     st.dataframe(tabla, use_container_width=True, hide_index=True, height=450)
     st.download_button(
         "⬇️ Descargar tabla (CSV)",
