@@ -176,6 +176,17 @@ st.sidebar.markdown("### Consulta activa")
 st.sidebar.write(f"Inicio: {inicio_local_str}")
 st.sidebar.write(f"Fin: {fin_local_str}")
 
+st.sidebar.markdown("---")
+st.sidebar.header("Limite de descarga")
+limite_filas = st.sidebar.number_input(
+    "Maximo de filas a traer (0 = sin limite)",
+    min_value=0, max_value=2_000_000, value=50_000, step=10_000,
+    help="Rangos de fecha muy amplios pueden tener cientos de miles de filas "
+         "(cada pagina son ~10,000 y la API limita a ~1 peticion/seg, asi que "
+         "traer todo puede tardar varios minutos). Este limite corta la "
+         "descarga cuando se alcanza, mostrando un aviso.",
+)
+
 # ===========================================================
 # CONFIGURACION API MEDUX
 # ===========================================================
@@ -230,11 +241,15 @@ def flatten_results(raw_json):
     return df
 
 
-def _descargar_paginado(url, headers, body, debug=False):
+def _descargar_paginado(url, headers, body, debug=False, limite_filas=0):
     """Loop de paginacion PIT/search_after (doc oficial: paginate:true en la
     primera peticion; la respuesta trae next_pagination_data.pit/search_after;
     esos dos valores se reenvian tal cual, junto con paginate:true, hasta que
     ya no venga pit o la pagina llegue vacia).
+
+    limite_filas: si es > 0, corta la descarga apenas se alcanza ese total
+    (evita quedarse minutos trayendo cientos de miles de filas crudas para
+    rangos de fecha muy amplios). 0 = sin limite.
     """
     todos_los_resultados = {}
     pagina = 1
@@ -247,6 +262,7 @@ def _descargar_paginado(url, headers, body, debug=False):
     search_after = None
 
     diag = st.empty() if debug else None
+    barra = st.progress(0, text="Descargando...") if debug else None
 
     while True:
         if pit:
@@ -294,7 +310,18 @@ def _descargar_paginado(url, headers, body, debug=False):
                 f"(acumulado {total_acumulado} / total API reportado: {total_reportado_api}). "
                 f"¿vino cursor pit? {'si' if pit else 'NO'}"
             )
+        if barra is not None and total_reportado_api:
+            objetivo = min(total_reportado_api, limite_filas) if limite_filas else total_reportado_api
+            frac = min(1.0, total_acumulado / objetivo) if objetivo else 1.0
+            barra.progress(frac, text=f"{total_acumulado:,} / {objetivo:,} filas")
 
+        if limite_filas and total_acumulado >= limite_filas:
+            st.warning(
+                f"⏹️ Se alcanzo el limite de {limite_filas:,} filas configurado en el sidebar "
+                f"(la API reporta {total_reportado_api:,} filas en total para este rango). "
+                f"Angosta el rango de fechas o sube el limite para traer todo."
+            )
+            break
         if pagina_vacia or not pit:
             break
         pagina += 1
@@ -306,15 +333,15 @@ def _descargar_paginado(url, headers, body, debug=False):
 
 
 @st.cache_data(ttl=1800)
-def obtener_datos_pag(url, headers, body, debug=False):
+def obtener_datos_pag(url, headers, body, debug=False, limite_filas=0):
     """Descarga paginada completa (modo historico / cacheado 30 min)."""
-    return _descargar_paginado(url, headers, body, debug=debug)
+    return _descargar_paginado(url, headers, body, debug=debug, limite_filas=limite_filas)
 
 
-def obtener_datos_pag_no_cache(url, headers, body, debug=False):
+def obtener_datos_pag_no_cache(url, headers, body, debug=False, limite_filas=0):
     """Descarga paginada completa SIN cache (modo tiempo real: siempre trae
     todo el rango solicitado, no solo la primera pagina)."""
-    return _descargar_paginado(url, headers, body, debug=debug)
+    return _descargar_paginado(url, headers, body, debug=debug, limite_filas=limite_filas)
 
 
 # ===========================================================
@@ -609,9 +636,9 @@ should_fetch = manual_trigger or time_trigger
 
 if should_fetch:
     raw = (
-        obtener_datos_pag_no_cache(API_URL, headers, body, debug=debug_paginacion)
+        obtener_datos_pag_no_cache(API_URL, headers, body, debug=debug_paginacion, limite_filas=limite_filas)
         if usar_real_time
-        else obtener_datos_pag(API_URL, headers, body, debug=debug_paginacion)
+        else obtener_datos_pag(API_URL, headers, body, debug=debug_paginacion, limite_filas=limite_filas)
     )
     if not raw:
         st.warning("No se recibieron datos de la API.")
@@ -662,7 +689,20 @@ elif provincia_sel != "Todas":
 # MAPA
 # ===========================================================
 st.markdown("#### 🗺️ Mapa por Distrito")
-mostrar_puntos = st.checkbox("Mostrar muestras individuales sobre el mapa", value=False)
+
+LIMITE_PUNTOS_MAPA = 5000
+puntos_disponibles = len(df_filtrado)
+if puntos_disponibles > LIMITE_PUNTOS_MAPA:
+    st.checkbox("Mostrar muestras individuales sobre el mapa", value=False, disabled=True)
+    st.caption(
+        f"⚠️ Hay {puntos_disponibles:,} muestras en el rango/filtro actual — "
+        f"por encima de {LIMITE_PUNTOS_MAPA:,} no se dibujan puntos individuales "
+        f"(el navegador se congelaria). Angosta el rango de fechas o el filtro "
+        f"de distrito/canton/provincia para poder verlos."
+    )
+    mostrar_puntos = False
+else:
+    mostrar_puntos = st.checkbox("Mostrar muestras individuales sobre el mapa", value=False)
 
 conteo_por_distrito = {
     clave: cantidad
