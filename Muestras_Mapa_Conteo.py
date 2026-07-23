@@ -606,8 +606,6 @@ def bounds_para_seleccion(seleccionados, total_distritos):
 # ===========================================================
 # 1) FILTRO FECHA (sidebar)
 # ===========================================================
-st.sidebar.markdown("## 📅 Filtro Fecha")
-
 st.sidebar.markdown("---")
 st.sidebar.header("Zona horaria")
 tz_map = {
@@ -658,8 +656,6 @@ st.sidebar.write(f"Fin: {fin_local_str}")
 # ===========================================================
 # 2) FILTRO DISTRITO (sidebar) - WFS de poligonos
 # ===========================================================
-st.sidebar.markdown("## 📍 Filtro Distrito")
-
 # La simplificacion de poligonos (slider) vive en "Resto de filtros", mas
 # abajo, pero el valor ya elegido (o el default 10m la primera vez) hace
 # falta AHORA para cargar los distritos que alimentan este selector. Como
@@ -724,13 +720,28 @@ distritos_tuplas_disponibles = sorted({
     and (provincia_sel == "Todos" or d["provincia"] == provincia_sel)
     and (canton_sel == "Todos" or d["canton"] == canton_sel)
 })
+# Codigo DTA por tupla (distrito, canton, provincia): se antepone en la
+# etiqueta de cada opcion para poder buscar/filtrar tambien por codigo
+# dentro de este mismo multiselect (no solo por nombre).
+codigo_por_tupla = {
+    (d["distrito"], d["canton"], d["provincia"]): d.get("codigo_dta") for d in distritos
+}
+
+
+def _formato_opcion_distrito(t):
+    codigo = codigo_por_tupla.get(t)
+    prefijo = f"{codigo} — " if codigo is not None else ""
+    return f"{prefijo}{t[0]} — {t[1]}, {t[2]}"
+
+
 distrito_sel = st.sidebar.multiselect(
-    "Distrito (podes elegir varios)",
+    "Distrito (podes elegir varios, por nombre o codigo DTA)",
     distritos_tuplas_disponibles,
-    format_func=lambda t: f"{t[0]} — {t[1]}, {t[2]}",
+    format_func=_formato_opcion_distrito,
     key="poly_distrito_sel",
     help="Sin nada seleccionado = todos los distritos (segun Provincia/Canton "
-         "de arriba). Elegir uno o mas manda sobre Provincia/Canton.",
+         "de arriba). Elegir uno o mas manda sobre Provincia/Canton. Podes "
+         "escribir el nombre o el codigo DTA para buscar.",
 )
 
 seleccion_actual = distritos_seleccionados(distritos, provincia_sel, canton_sel, distrito_sel)
@@ -741,8 +752,6 @@ nombres_resaltados = {(d["distrito"], d["canton"], d["provincia"]) for d in sele
 # ===========================================================
 # 3) FILTRO TECNOLOGIA Y OPERADOR (sidebar)
 # ===========================================================
-st.sidebar.markdown("## 📶 Filtro Tecnologia y Operador")
-
 if "poly_last_fetch_ts" not in st.session_state:
     st.session_state.poly_last_fetch_ts = 0.0
 if "poly_df" not in st.session_state:
@@ -780,8 +789,6 @@ operador_sel = st.sidebar.multiselect(
 # 4) RESTO DE FILTROS (sidebar): tipos de prueba, limite de descarga,
 #    detalle del mapa, diagnostico y el boton "Consultar API"
 # ===========================================================
-st.sidebar.markdown("## ⚙️ Resto de Filtros")
-
 st.sidebar.markdown("---")
 st.sidebar.header("Tipos de prueba (programs)")
 programas = st.sidebar.multiselect(
