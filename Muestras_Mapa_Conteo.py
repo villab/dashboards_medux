@@ -128,8 +128,10 @@ st.sidebar.header("Actualizacion automatica")
 refresh_seconds = st.sidebar.slider("Frecuencia de refresco (segundos)", 10, 300, 60)
 usar_real_time = st.sidebar.checkbox("Modo tiempo real", value=True)
 if usar_real_time:
-    from streamlit_autorefresh import st_autorefresh
-    st_autorefresh(interval=refresh_seconds * 1000, key="poly_real_time_refresh")
+    # Meta-refresh en HTML puro: recarga la pagina cada N segundos sin
+    # depender del componente externo streamlit-autorefresh (su frontend JS
+    # a veces no carga segun la red/proxy de donde este desplegada la app).
+    st.markdown(f'<meta http-equiv="refresh" content="{refresh_seconds}">', unsafe_allow_html=True)
 
 REALTIME_HOURS = 8
 
