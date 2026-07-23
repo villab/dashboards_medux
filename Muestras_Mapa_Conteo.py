@@ -230,9 +230,14 @@ def flatten_results(raw_json):
     return df
 
 
-@st.cache_data(ttl=1800)
-def obtener_datos_pag(url, headers, body):
-    """Descarga paginada (modo historico / cacheado)."""
+def _descargar_paginado(url, headers, body):
+    """Loop de paginacion PIT/search_after (ver skill sutel-api-extraction, sec. 8).
+
+    IMPORTANTE: sin esto la API solo devuelve la primera pagina (tope 'size',
+    default 10000) y cualquier consulta con mas resultados que eso se corta
+    en silencio -- por eso en modo tiempo real se veian siempre exactamente
+    10000 muestras. Esta funcion la usan AMBOS modos (historico y tiempo real).
+    """
     todos_los_resultados = {}
     pagina = 1
     total = 0
@@ -246,6 +251,11 @@ def obtener_datos_pag(url, headers, body):
             payload["pit"] = pit
         if search_after:
             payload["search_after"] = search_after
+
+        # La API limita a ~1 req/s (ver skill sutel-api-extraction, sec. 2);
+        # el PIT caduca en 1 minuto, asi que se pagina sin pausas largas.
+        if pagina > 1:
+            time.sleep(1.05)
 
         r = requests.post(url, headers=headers, json=payload, timeout=60)
         if r.status_code != 200:
@@ -275,17 +285,16 @@ def obtener_datos_pag(url, headers, body):
     return todos_los_resultados
 
 
+@st.cache_data(ttl=1800)
+def obtener_datos_pag(url, headers, body):
+    """Descarga paginada completa (modo historico / cacheado 30 min)."""
+    return _descargar_paginado(url, headers, body)
+
+
 def obtener_datos_pag_no_cache(url, headers, body):
-    """Consulta directa sin cache (modo tiempo real)."""
-    try:
-        r = requests.post(url, headers=headers, json=body, timeout=60)
-        if r.status_code == 200:
-            return r.json()
-        st.warning(f"Error API: {r.status_code}")
-        return None
-    except Exception as e:
-        st.error(f"Error al consultar API: {e}")
-        return None
+    """Descarga paginada completa SIN cache (modo tiempo real: siempre trae
+    todo el rango solicitado, no solo la primera pagina)."""
+    return _descargar_paginado(url, headers, body)
 
 
 # ===========================================================
