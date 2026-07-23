@@ -4,5 +4,9 @@ requests
 plotly
 pytz
 streamlit-autorefresh
-
+shapely>=2.0
+pyproj
+folium
+streamlit-folium
+branca
 
