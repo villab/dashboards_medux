@@ -230,21 +230,23 @@ def flatten_results(raw_json):
     return df
 
 
-def _descargar_paginado(url, headers, body):
-    """Loop de paginacion PIT/search_after (ver skill sutel-api-extraction, sec. 8).
-
-    IMPORTANTE: sin esto la API solo devuelve la primera pagina (tope 'size',
-    default 10000) y cualquier consulta con mas resultados que eso se corta
-    en silencio -- por eso en modo tiempo real se veian siempre exactamente
-    10000 muestras. Esta funcion la usan AMBOS modos (historico y tiempo real).
+def _descargar_paginado(url, headers, body, debug=False):
+    """Loop de paginacion PIT/search_after (doc oficial: paginate:true en la
+    primera peticion; la respuesta trae next_pagination_data.pit/search_after;
+    esos dos valores se reenvian tal cual, junto con paginate:true, hasta que
+    ya no venga pit o la pagina llegue vacia).
     """
     todos_los_resultados = {}
     pagina = 1
-    total = 0
+    total_acumulado = 0
+    total_reportado_api = None
     payload = body.copy()
     payload["paginate"] = True
+    payload.setdefault("size", 10000)
     pit = None
     search_after = None
+
+    diag = st.empty() if debug else None
 
     while True:
         if pit:
@@ -252,39 +254,46 @@ def _descargar_paginado(url, headers, body):
         if search_after:
             payload["search_after"] = search_after
 
-        # La API limita a ~1 req/s (ver skill sutel-api-extraction, sec. 2);
-        # el PIT caduca en 1 minuto, asi que se pagina sin pausas largas.
+        # La API limita a ~1 req/s; el PIT caduca en 1 minuto, asi que se
+        # pagina sin pausas largas entre peticiones.
         if pagina > 1:
             time.sleep(1.05)
 
         r = requests.post(url, headers=headers, json=payload, timeout=60)
         if r.status_code != 200:
-            st.error(f"Error API: {r.status_code}")
+            st.error(f"Error API en pagina {pagina}: {r.status_code} — {r.text[:500]}")
             break
 
         data = r.json()
+        total_reportado_api = data.get("total", total_reportado_api)
         results = data.get("results", {})
         pagina_vacia = True
+        filas_en_pagina = 0
         if isinstance(results, list):
+            filas_en_pagina = len(results)
             if results:
                 pagina_vacia = False
             todos_los_resultados.setdefault("network", []).extend(results)
-            total += len(results)
         elif isinstance(results, dict):
             for prog, res in results.items():
                 if isinstance(res, list):
+                    filas_en_pagina += len(res)
                     if res:
                         pagina_vacia = False
                     todos_los_resultados.setdefault(prog, []).extend(res)
-                    total += len(res)
+        total_acumulado += filas_en_pagina
 
-        # El cursor de paginacion viene ANIDADO en "next_pagination_data"
-        # (no en la raiz del JSON). Ese era el bug: pit/search_after siempre
-        # daban None leyendolos de data.get(...) directo, y el loop cortaba
-        # despues de la primera pagina.
+        # El cursor de paginacion viene ANIDADO en "next_pagination_data".
         cursor = data.get("next_pagination_data") or {}
-        pit = cursor.get("pit") or data.get("pit")
-        search_after = cursor.get("search_after") or data.get("search_after")
+        pit = cursor.get("pit")
+        search_after = cursor.get("search_after")
+
+        if diag is not None:
+            diag.caption(
+                f"📥 Pagina {pagina}: {filas_en_pagina} filas "
+                f"(acumulado {total_acumulado} / total API reportado: {total_reportado_api}). "
+                f"¿vino cursor pit? {'si' if pit else 'NO'}"
+            )
 
         if pagina_vacia or not pit:
             break
@@ -297,15 +306,15 @@ def _descargar_paginado(url, headers, body):
 
 
 @st.cache_data(ttl=1800)
-def obtener_datos_pag(url, headers, body):
+def obtener_datos_pag(url, headers, body, debug=False):
     """Descarga paginada completa (modo historico / cacheado 30 min)."""
-    return _descargar_paginado(url, headers, body)
+    return _descargar_paginado(url, headers, body, debug=debug)
 
 
-def obtener_datos_pag_no_cache(url, headers, body):
+def obtener_datos_pag_no_cache(url, headers, body, debug=False):
     """Descarga paginada completa SIN cache (modo tiempo real: siempre trae
     todo el rango solicitado, no solo la primera pagina)."""
-    return _descargar_paginado(url, headers, body)
+    return _descargar_paginado(url, headers, body, debug=debug)
 
 
 # ===========================================================
@@ -590,6 +599,9 @@ if "poly_last_fetch_ts" not in st.session_state:
 if "poly_df" not in st.session_state:
     st.session_state.poly_df = pd.DataFrame()
 
+st.sidebar.markdown("---")
+debug_paginacion = st.sidebar.checkbox("🔧 Mostrar diagnostico de paginacion", value=True)
+
 now = time.time()
 manual_trigger = st.sidebar.button("Consultar API")
 time_trigger = usar_real_time and (now - st.session_state.poly_last_fetch_ts >= refresh_seconds)
@@ -597,9 +609,9 @@ should_fetch = manual_trigger or time_trigger
 
 if should_fetch:
     raw = (
-        obtener_datos_pag_no_cache(API_URL, headers, body)
+        obtener_datos_pag_no_cache(API_URL, headers, body, debug=debug_paginacion)
         if usar_real_time
-        else obtener_datos_pag(API_URL, headers, body)
+        else obtener_datos_pag(API_URL, headers, body, debug=debug_paginacion)
     )
     if not raw:
         st.warning("No se recibieron datos de la API.")
