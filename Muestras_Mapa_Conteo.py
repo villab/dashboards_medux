@@ -631,12 +631,17 @@ def construir_mapa(distritos, conteo_por_distrito, df_puntos=None, mostrar_punto
 
 
 def distritos_seleccionados(distritos, provincia_sel, canton_sel, distrito_sel):
-    """Poligonos que calzan con el filtro Provincia/Canton/Distrito activo."""
+    """Poligonos que calzan con el filtro activo.
+    distrito_sel es una LISTA de tuplas (distrito, canton, provincia) --
+    puede venir vacia (sin filtro de distrito especifico). Si tiene algo,
+    manda sobre Provincia/Canton (es el filtro mas especifico)."""
+    if distrito_sel:
+        claves = set(distrito_sel)
+        return [d for d in distritos if (d["distrito"], d["canton"], d["provincia"]) in claves]
     return [
         d for d in distritos
-        if (provincia_sel == "Todas" or d["provincia"] == provincia_sel)
+        if (provincia_sel == "Todos" or d["provincia"] == provincia_sel)
         and (canton_sel == "Todos" or d["canton"] == canton_sel)
-        and (distrito_sel == "Todos" or d["distrito"] == distrito_sel)
     ]
 
 
@@ -695,13 +700,17 @@ def _aplicar_codigo_dta():
     if match:
         st.session_state["poly_provincia_sel"] = match["provincia"]
         st.session_state["poly_canton_sel"] = match["canton"]
-        st.session_state["poly_distrito_sel"] = match["distrito"]
+        # "Distrito" es un multiselect: al elegir un codigo, se selecciona
+        # SOLO ese distrito (reemplaza cualquier seleccion multiple previa).
+        st.session_state["poly_distrito_sel"] = [
+            (match["distrito"], match["canton"], match["provincia"])
+        ]
 
 
 codigo_sel = st.sidebar.selectbox(
     "Codigo DTA",
-    ["Ninguno"] + codigos_disponibles,
-    format_func=lambda c: c if c == "Ninguno" else (
+    ["Todos"] + codigos_disponibles,
+    format_func=lambda c: c if c == "Todos" else (
         f"{c} — {codigos_por_valor[c]['distrito']} "
         f"({codigos_por_valor[c]['canton']}, {codigos_por_valor[c]['provincia']})"
     ),
@@ -713,22 +722,30 @@ codigo_sel = st.sidebar.selectbox(
 provincias_disponibles = sorted({
     d["provincia"] for d in distritos if d["provincia"] and d["provincia"] != "N/D"
 })
-provincia_sel = st.sidebar.selectbox("Provincia", ["Todas"] + provincias_disponibles, key="poly_provincia_sel")
+provincia_sel = st.sidebar.selectbox("Provincia", ["Todos"] + provincias_disponibles, key="poly_provincia_sel")
 
 cantones_disponibles = sorted({
     d["canton"] for d in distritos
     if d["canton"] and d["canton"] != "N/D"
-    and (provincia_sel == "Todas" or d["provincia"] == provincia_sel)
+    and (provincia_sel == "Todos" or d["provincia"] == provincia_sel)
 })
 canton_sel = st.sidebar.selectbox("Canton", ["Todos"] + cantones_disponibles, key="poly_canton_sel")
 
-distritos_disponibles = sorted({
-    d["distrito"] for d in distritos
+distritos_tuplas_disponibles = sorted({
+    (d["distrito"], d["canton"], d["provincia"])
+    for d in distritos
     if d["distrito"] and d["distrito"] != "N/D"
-    and (provincia_sel == "Todas" or d["provincia"] == provincia_sel)
+    and (provincia_sel == "Todos" or d["provincia"] == provincia_sel)
     and (canton_sel == "Todos" or d["canton"] == canton_sel)
 })
-distrito_sel = st.sidebar.selectbox("Distrito", ["Todos"] + distritos_disponibles, key="poly_distrito_sel")
+distrito_sel = st.sidebar.multiselect(
+    "Distrito (podes elegir varios)",
+    distritos_tuplas_disponibles,
+    format_func=lambda t: f"{t[0]} — {t[1]}, {t[2]}",
+    key="poly_distrito_sel",
+    help="Sin nada seleccionado = todos los distritos (segun Provincia/Canton "
+         "de arriba). Elegir uno o mas manda sobre Provincia/Canton.",
+)
 
 seleccion_actual = distritos_seleccionados(distritos, provincia_sel, canton_sel, distrito_sel)
 bounds_seleccion = bounds_para_seleccion(seleccion_actual, len(distritos))
@@ -788,34 +805,47 @@ if sin_match:
 col_tech = next((c for c in ["technology", "subtechnology", "tech", "accessTechnology"] if c in df.columns), None)
 
 st.sidebar.markdown("---")
-st.sidebar.header("Filtrar por tecnologia")
+st.sidebar.header("Filtrar por tecnologia y operador")
 if col_tech:
     tecnologias_disponibles = sorted(df[col_tech].dropna().astype(str).unique())
-    tecnologias_sel = st.sidebar.multiselect(
-        f"Tecnologia (columna '{col_tech}')", tecnologias_disponibles,
-        default=tecnologias_disponibles,
+    tecnologia_sel = st.sidebar.selectbox(
+        f"Tecnologia (columna '{col_tech}')", ["Todos"] + tecnologias_disponibles,
     )
 else:
     st.sidebar.caption("No se encontro una columna de tecnologia en los datos traidos.")
-    tecnologias_sel = None
+    tecnologia_sel = "Todos"
 
-# Filtrar el dataframe segun el selector de Provincia/Canton/Distrito/Tecnologia
+# --- Selector de Operador (ISP), mismo estilo que los demas selectores.
+operadores_disponibles = sorted({
+    ISP_NAME_MAP.get(v, v) for v in df["isp"].dropna().unique()
+}) if "isp" in df.columns else []
+operador_sel = st.sidebar.selectbox("Operador", ["Todos"] + operadores_disponibles)
+
+# Filtrar el dataframe segun Provincia/Canton/Distrito/Tecnologia/Operador.
+# "Distrito" (multiselect de tuplas distrito+canton+provincia) es el mas
+# especifico: si tiene algo seleccionado, manda sobre Provincia/Canton.
 mask = pd.Series(True, index=df.index)
-if provincia_sel != "Todas":
-    mask &= df["provincia"] == provincia_sel
-if canton_sel != "Todos":
-    mask &= df["canton"] == canton_sel
-if distrito_sel != "Todos":
-    mask &= df["distrito"] == distrito_sel
-if col_tech and tecnologias_sel is not None:
-    mask &= df[col_tech].astype(str).isin(tecnologias_sel)
+if distrito_sel:
+    claves_sel = {f"{d}||{c}||{p}" for d, c, p in distrito_sel}
+    claves_df = df["distrito"].astype(str) + "||" + df["canton"].astype(str) + "||" + df["provincia"].astype(str)
+    mask &= claves_df.isin(claves_sel)
+else:
+    if provincia_sel != "Todos":
+        mask &= df["provincia"] == provincia_sel
+    if canton_sel != "Todos":
+        mask &= df["canton"] == canton_sel
+if col_tech and tecnologia_sel != "Todos":
+    mask &= df[col_tech].astype(str) == tecnologia_sel
+if operador_sel != "Todos" and "isp" in df.columns:
+    mask &= df["isp"].apply(lambda v: ISP_NAME_MAP.get(v, v)) == operador_sel
 df_filtrado = df[mask]
 
-if distrito_sel != "Todos":
-    st.caption(f"📍 Filtrando por distrito: **{distrito_sel}** ({canton_sel}, {provincia_sel}) — {len(df_filtrado)} muestras")
+if distrito_sel:
+    nombres_distritos = ", ".join(d for d, _, _ in distrito_sel)
+    st.caption(f"📍 Filtrando por distrito(s): **{nombres_distritos}** — {len(df_filtrado)} muestras")
 elif canton_sel != "Todos":
     st.caption(f"📍 Filtrando por canton: **{canton_sel}** ({provincia_sel}) — {len(df_filtrado)} muestras")
-elif provincia_sel != "Todas":
+elif provincia_sel != "Todos":
     st.caption(f"📍 Filtrando por provincia: **{provincia_sel}** — {len(df_filtrado)} muestras")
 
 # ===========================================================
