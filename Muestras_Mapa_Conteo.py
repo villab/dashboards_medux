@@ -450,6 +450,33 @@ def asignar_distritos(df, distritos, col_lat="latitude", col_lon="longitude"):
     return df
 
 
+def preparar_test_con_target(df):
+    """Desglosa 'ping-test' por target/IP destino (se espera que sean 2 IPs)
+    en vez de agregar todo bajo una sola etiqueta 'ping-test'. El campo
+    'target' puede venir directo o anidado en 'args' segun el program."""
+    if df.empty or "test" not in df.columns:
+        return df, None
+
+    df = df.copy()
+    target_series = None
+    if "target" in df.columns:
+        target_series = df["target"]
+    elif "args" in df.columns:
+        target_series = df["args"].apply(lambda v: v.get("target") if isinstance(v, dict) else None)
+
+    if target_series is None:
+        return df, None
+
+    es_ping = df["test"] == "ping-test"
+    con_target = es_ping & target_series.notna()
+    etiqueta = df["test"].astype(str).copy()
+    etiqueta.loc[con_target] = "ping-test (" + target_series[con_target].astype(str) + ")"
+    df["test"] = etiqueta
+
+    n_targets = df.loc[con_target, "test"].nunique()
+    return df, n_targets
+
+
 # ===========================================================
 # TABLA DE CONTEO: Distrito (x Tecnologia) x ISP x Program
 # ===========================================================
@@ -624,10 +651,38 @@ def construir_mapa(distritos, conteo_por_distrito, df_puntos=None, mostrar_punto
                 ),
             ).add_to(m)
 
+            isps_presentes = sorted({f["properties"]["isp"] for f in punto_features if f["properties"]["isp"]})
+            _agregar_leyenda_isp(m, isps_presentes)
+
     if bounds:
         m.fit_bounds(bounds)
 
     return m
+
+
+def _agregar_leyenda_isp(m, isps_presentes):
+    """Caja de leyenda fija (convenciones de color) para los puntos por
+    operador -- el colormap de distritos ya trae su propia leyenda via
+    branca (colormap.add_to(m)), esta es solo para los puntos individuales."""
+    if not isps_presentes:
+        return
+    filas = "".join(
+        f'<div style="margin-bottom:4px;">'
+        f'<span style="display:inline-block;width:12px;height:12px;border-radius:50%;'
+        f'background:{ISP_COLOR_MAP.get(isp, "#333333")};margin-right:6px;'
+        f'vertical-align:middle;border:1px solid rgba(0,0,0,0.25);"></span>{isp}</div>'
+        for isp in isps_presentes
+    )
+    legend_html = f"""
+    <div style="position: fixed; bottom: 30px; left: 30px; z-index:9999;
+                background: white; padding: 10px 14px; border:1px solid #999;
+                border-radius:6px; font-size:13px; box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+                font-family: sans-serif; line-height:1.3;">
+        <div style="font-weight:600; margin-bottom:6px;">Operador (muestras)</div>
+        {filas}
+    </div>
+    """
+    m.get_root().html.add_child(folium.Element(legend_html))
 
 
 def distritos_seleccionados(distritos, provincia_sel, canton_sel, distrito_sel):
@@ -908,7 +963,13 @@ components.html(mapa.get_root().render(), height=620, scrolling=False)
 # TABLA DE CONTEO POR DISTRITO x PROGRAM x ISP
 # ===========================================================
 st.markdown("#### 📋 Conteo de pruebas por Distrito x Program x ISP")
-tabla = tabla_conteo_distrito(df_filtrado, col_tech=col_tech)
+df_para_tabla, n_targets_ping = preparar_test_con_target(df_filtrado)
+tabla = tabla_conteo_distrito(df_para_tabla, col_tech=col_tech)
+if n_targets_ping is not None:
+    if n_targets_ping == 2:
+        st.caption(f"✅ ping-test desglosado por target: {n_targets_ping} IP destino detectadas, como se esperaba.")
+    else:
+        st.warning(f"⚠️ ping-test desglosado por target: se detectaron {n_targets_ping} IP destino (se esperaban 2). Revisa el campo 'target'/'args' de los resultados.")
 if tabla.empty:
     st.info("No hay suficientes datos (con coordenadas validas) para generar la tabla.")
 else:
