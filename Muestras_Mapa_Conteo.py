@@ -264,18 +264,29 @@ def _descargar_paginado(url, headers, body):
 
         data = r.json()
         results = data.get("results", {})
+        pagina_vacia = True
         if isinstance(results, list):
+            if results:
+                pagina_vacia = False
             todos_los_resultados.setdefault("network", []).extend(results)
             total += len(results)
         elif isinstance(results, dict):
             for prog, res in results.items():
                 if isinstance(res, list):
+                    if res:
+                        pagina_vacia = False
                     todos_los_resultados.setdefault(prog, []).extend(res)
                     total += len(res)
 
-        pit = data.get("pit")
-        search_after = data.get("search_after")
-        if not search_after or not pit:
+        # El cursor de paginacion viene ANIDADO en "next_pagination_data"
+        # (no en la raiz del JSON). Ese era el bug: pit/search_after siempre
+        # daban None leyendolos de data.get(...) directo, y el loop cortaba
+        # despues de la primera pagina.
+        cursor = data.get("next_pagination_data") or {}
+        pit = cursor.get("pit") or data.get("pit")
+        search_after = cursor.get("search_after") or data.get("search_after")
+
+        if pagina_vacia or not pit:
             break
         pagina += 1
         if pagina > 100:
