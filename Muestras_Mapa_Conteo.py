@@ -28,6 +28,13 @@ Notas de rendimiento (ver seccion "OPTIMIZACION"):
     - El mapa se dibuja como UNA sola capa GeoJson (494 features en un solo layer)
       en vez de 494 capas individuales, y se renderiza con components.html en vez
       de streamlit-folium (evita el puente bidireccional que agrega latencia).
+
+Orden del sidebar (de arriba a abajo):
+    1) Filtro Fecha
+    2) Filtro Distrito
+    3) Filtro tecnologia y operador
+    4) Resto de filtros (tipos de prueba, limite de descarga, detalle del
+       mapa, y el boton "Consultar API")
 """
 
 import time
@@ -91,116 +98,11 @@ except Exception as e:
     st.exception(e)
     st.stop()
 
-# ===========================================================
-# SIDEBAR - Tipos de prueba
-# ===========================================================
-st.sidebar.markdown("---")
-st.sidebar.header("Tipos de prueba (programs)")
-programas = st.sidebar.multiselect(
-    "Selecciona programs",
-    [
-        "http-down-burst-test", "http-upload-burst-test", "ping-test", "network",
-        "voice-out", "voice-polqa", "sms-mo",
-    ],
-    default=[
-        "ping-test", "http-down-burst-test", "http-upload-burst-test",
-        "voice-out", "voice-polqa", "sms-mo",
-    ],
-)
 
 # ===========================================================
-# SIDEBAR - Zona horaria
+# FUNCIONES (definidas todas aqui arriba para que el orden del sidebar,
+# mas abajo, se pueda reacomodar libremente sin preocuparse por dependencias)
 # ===========================================================
-st.sidebar.markdown("---")
-st.sidebar.header("Zona horaria")
-tz_map = {
-    "Costa Rica (CST)": "America/Costa_Rica",
-    "UTC": "UTC",
-}
-tz_label = st.sidebar.selectbox("Zona horaria de fechas", list(tz_map.keys()), index=0)
-zona_local = pytz.timezone(tz_map[tz_label])
-
-# ===========================================================
-# SIDEBAR - Rango manual de fechas
-# ===========================================================
-# NOTA: se elimino el modo "tiempo real" / auto-refresh (tanto el componente
-# externo streamlit-autorefresh, que fallaba en cargar sus assets JS, como el
-# <meta http-equiv="refresh">, que provoca recargas COMPLETAS de pagina no
-# cancelables -- si la app esta embebida en un iframe/portal, la sesion se
-# puede perder en cada recarga, generando un loop de refresco imposible de
-# apagar desde la UI). El flujo es manual: boton "Consultar API".
-st.sidebar.markdown("---")
-st.sidebar.header("Fecha")
-if "poly_fecha_inicio" not in st.session_state:
-    ahora_local = datetime.now(zona_local)
-    inicio_defecto_local = ahora_local - timedelta(days=1)
-    st.session_state.poly_fecha_inicio = inicio_defecto_local.date()
-    st.session_state.poly_hora_inicio = inicio_defecto_local.time()
-    st.session_state.poly_fecha_fin = ahora_local.date()
-    st.session_state.poly_hora_fin = ahora_local.time()
-
-fecha_inicio = st.sidebar.date_input("Fecha inicio", key="poly_fecha_inicio")
-hora_inicio = st.sidebar.time_input("Hora inicio", key="poly_hora_inicio")
-fecha_fin = st.sidebar.date_input("Fecha fin", key="poly_fecha_fin")
-hora_fin = st.sidebar.time_input("Hora fin", key="poly_hora_fin")
-
-# ===========================================================
-# CALCULAR TIMESTAMPS
-# ===========================================================
-dt_inicio_naive = datetime.combine(fecha_inicio, hora_inicio)
-dt_fin_naive = datetime.combine(fecha_fin, hora_fin)
-dt_inicio_local = zona_local.localize(dt_inicio_naive, is_dst=None)
-dt_fin_local = zona_local.localize(dt_fin_naive, is_dst=None)
-if dt_inicio_local >= dt_fin_local:
-    st.error(f"Rango de fechas invalido.\nInicio: {dt_inicio_local}\nFin: {dt_fin_local}")
-    st.stop()
-ts_start = int(dt_inicio_local.astimezone(pytz.utc).timestamp() * 1000)
-ts_end = int(dt_fin_local.astimezone(pytz.utc).timestamp() * 1000)
-
-inicio_local_str = datetime.fromtimestamp(ts_start / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
-fin_local_str = datetime.fromtimestamp(ts_end / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
-st.sidebar.markdown("### Consulta activa")
-st.sidebar.write(f"Inicio: {inicio_local_str}")
-st.sidebar.write(f"Fin: {fin_local_str}")
-
-st.sidebar.markdown("---")
-st.sidebar.header("Limite de descarga")
-limite_filas = st.sidebar.number_input(
-    "Maximo de filas a traer (0 = sin limite)",
-    min_value=0, max_value=2_000_000, value=50_000, step=10_000,
-    help="Rangos de fecha muy amplios pueden tener cientos de miles de filas "
-         "(cada pagina son ~10,000 y la API limita a ~1 peticion/seg, asi que "
-         "traer todo puede tardar varios minutos). Este limite corta la "
-         "descarga cuando se alcanza, mostrando un aviso.",
-)
-solo_validas = st.sidebar.checkbox(
-    "Traer solo muestras validas (success=1, exitCode=0)",
-    value=False,
-    help="Filtra del lado del servidor (menos filas para transferir y "
-         "paginar = mas rapido), pero el conteo de pruebas por distrito ya "
-         "no incluira los intentos fallidos/de sonda con averia.",
-)
-
-# ===========================================================
-# CONFIGURACION API MEDUX
-# ===========================================================
-API_URL = "https://medux-ids.caseonit.com/api/results"
-headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-body = {
-    "tsStart": ts_start,
-    "tsEnd": ts_end,
-    "format": "raw",
-    "timezone": "America/Costa_Rica",
-    "programs": programas,
-    "probes": [str(p) for p in probes if pd.notna(p)],
-}
-if solo_validas:
-    body["conditions"] = [
-        {"parameters": [{"field": "success"}], "operator": "eq", "value": 1},
-        {"parameters": [{"field": "exitCode"}], "operator": "eq", "value": 0},
-    ]
-
-
 def flatten_results(raw_json):
     """Aplana la respuesta anidada de /api/results en un DataFrame."""
     filas = []
@@ -351,9 +253,6 @@ def obtener_datos_pag(url, headers, body, debug=False, limite_filas=0):
     return _descargar_paginado(url, headers, body, debug=debug, limite_filas=limite_filas)
 
 
-# ===========================================================
-# WFS - CARGA DE POLIGONOS DE DISTRITOS (cache 24h, no cambian seguido)
-# ===========================================================
 # 1 grado ~ 111,320 m cerca del ecuador (Costa Rica ~9-11N, el error de esta
 # aproximacion es minimo). "tolerancia_m" se pasa como parametro para que el
 # cache se invalide solo cuando cambia el nivel de detalle, no en cada rerun.
@@ -407,10 +306,8 @@ def cargar_distritos_wfs(tolerancia_m=10):
     return distritos
 
 
-# ===========================================================
-# SPATIAL JOIN - asignar cada muestra a su distrito
-# ===========================================================
 def asignar_distritos(df, distritos, col_lat="latitude", col_lon="longitude"):
+    """Spatial join: asigna cada muestra a su distrito."""
     df = df.copy()
     df["distrito"] = None
     df["canton"] = None
@@ -477,9 +374,6 @@ def preparar_test_con_target(df):
     return df, n_targets
 
 
-# ===========================================================
-# TABLA DE CONTEO: Distrito (x Tecnologia) x ISP x Program
-# ===========================================================
 def tabla_conteo_distrito(df, col_tech=None):
     """Conteo de pruebas por distrito, con columnas agrupadas por ISP primero
     y luego por program (mas facil comparar los mismos programs entre los 3
@@ -530,9 +424,6 @@ def tabla_conteo_distrito(df, col_tech=None):
     return pivot
 
 
-# ===========================================================
-# MAPA CHOROPLETH POR DISTRITO + PUNTOS OPCIONALES
-# ===========================================================
 def construir_mapa(distritos, conteo_por_distrito, df_puntos=None, mostrar_puntos=False,
                     bounds=None, distritos_resaltados=None, paleta=None,
                     usar_escalones=False, n_escalones=6, metodo_escalon="quantiles",
@@ -713,31 +604,71 @@ def bounds_para_seleccion(seleccionados, total_distritos):
 
 
 # ===========================================================
-# CARGA DE POLIGONOS + SELECTOR DE DISTRITO (sidebar)
+# 1) FILTRO FECHA (sidebar)
 # ===========================================================
-st.sidebar.markdown("---")
-st.sidebar.header("Detalle del mapa")
-simplificacion_m = st.sidebar.slider(
-    "Simplificacion de poligonos (metros)",
-    min_value=0, max_value=100, value=10, step=5,
-    help="0 = geometria original del IGN (mas fiel, mapa mas pesado). "
-         "Valores altos deforman distritos pequenos/urbanos.",
-)
-distritos = cargar_distritos_wfs(simplificacion_m)
+st.sidebar.markdown("## 📅 Filtro Fecha")
 
-PALETAS_MAPA = {
-    "Amarillo-Naranja-Rojo": "YlOrRd_09",
-    "Amarillo-Verde-Azul": "YlGnBu_09",
-    "Azules": "Blues_09",
-    "Verdes": "Greens_09",
-    "Purpuras": "Purples_09",
-    "Rojo-Purpura": "RdPu_09",
-    "Naranjas": "OrRd_09",
-    "Viridis": "viridis",
-    "Plasma": "plasma",
+st.sidebar.markdown("---")
+st.sidebar.header("Zona horaria")
+tz_map = {
+    "Costa Rica (CST)": "America/Costa_Rica",
+    "UTC": "UTC",
 }
-paleta_label = st.sidebar.selectbox("Escala de color del mapa", list(PALETAS_MAPA.keys()), index=0)
-paleta_mapa = getattr(cm.linear, PALETAS_MAPA[paleta_label])
+tz_label = st.sidebar.selectbox("Zona horaria de fechas", list(tz_map.keys()), index=0)
+zona_local = pytz.timezone(tz_map[tz_label])
+
+# NOTA: se elimino el modo "tiempo real" / auto-refresh (tanto el componente
+# externo streamlit-autorefresh, que fallaba en cargar sus assets JS, como el
+# <meta http-equiv="refresh">, que provoca recargas COMPLETAS de pagina no
+# cancelables -- si la app esta embebida en un iframe/portal, la sesion se
+# puede perder en cada recarga, generando un loop de refresco imposible de
+# apagar desde la UI). El flujo es manual: boton "Consultar API".
+st.sidebar.markdown("---")
+st.sidebar.header("Fecha")
+if "poly_fecha_inicio" not in st.session_state:
+    ahora_local = datetime.now(zona_local)
+    inicio_defecto_local = ahora_local - timedelta(days=1)
+    st.session_state.poly_fecha_inicio = inicio_defecto_local.date()
+    st.session_state.poly_hora_inicio = inicio_defecto_local.time()
+    st.session_state.poly_fecha_fin = ahora_local.date()
+    st.session_state.poly_hora_fin = ahora_local.time()
+
+fecha_inicio = st.sidebar.date_input("Fecha inicio", key="poly_fecha_inicio")
+hora_inicio = st.sidebar.time_input("Hora inicio", key="poly_hora_inicio")
+fecha_fin = st.sidebar.date_input("Fecha fin", key="poly_fecha_fin")
+hora_fin = st.sidebar.time_input("Hora fin", key="poly_hora_fin")
+
+# --- Calcular timestamps ---
+dt_inicio_naive = datetime.combine(fecha_inicio, hora_inicio)
+dt_fin_naive = datetime.combine(fecha_fin, hora_fin)
+dt_inicio_local = zona_local.localize(dt_inicio_naive, is_dst=None)
+dt_fin_local = zona_local.localize(dt_fin_naive, is_dst=None)
+if dt_inicio_local >= dt_fin_local:
+    st.error(f"Rango de fechas invalido.\nInicio: {dt_inicio_local}\nFin: {dt_fin_local}")
+    st.stop()
+ts_start = int(dt_inicio_local.astimezone(pytz.utc).timestamp() * 1000)
+ts_end = int(dt_fin_local.astimezone(pytz.utc).timestamp() * 1000)
+
+inicio_local_str = datetime.fromtimestamp(ts_start / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
+fin_local_str = datetime.fromtimestamp(ts_end / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
+st.sidebar.markdown("### Consulta activa")
+st.sidebar.write(f"Inicio: {inicio_local_str}")
+st.sidebar.write(f"Fin: {fin_local_str}")
+
+# ===========================================================
+# 2) FILTRO DISTRITO (sidebar) - WFS de poligonos
+# ===========================================================
+st.sidebar.markdown("## 📍 Filtro Distrito")
+
+# La simplificacion de poligonos (slider) vive en "Resto de filtros", mas
+# abajo, pero el valor ya elegido (o el default 10m la primera vez) hace
+# falta AHORA para cargar los distritos que alimentan este selector. Como
+# Streamlit ya deja el valor del slider guardado en session_state entre
+# reruns, leerlo aqui (antes de que el slider se dibuje mas abajo) siempre
+# refleja el ultimo valor elegido por el usuario.
+if "poly_simplificacion_m" not in st.session_state:
+    st.session_state["poly_simplificacion_m"] = 10
+distritos = cargar_distritos_wfs(st.session_state["poly_simplificacion_m"])
 
 st.sidebar.markdown("---")
 st.sidebar.header("Filtrar por distrito")
@@ -808,55 +739,19 @@ nombres_resaltados = {(d["distrito"], d["canton"], d["provincia"]) for d in sele
     if bounds_seleccion else set()
 
 # ===========================================================
-# EJECUTAR CONSULTA API
+# 3) FILTRO TECNOLOGIA Y OPERADOR (sidebar)
 # ===========================================================
+st.sidebar.markdown("## 📶 Filtro Tecnologia y Operador")
+
 if "poly_last_fetch_ts" not in st.session_state:
     st.session_state.poly_last_fetch_ts = 0.0
 if "poly_df" not in st.session_state:
     st.session_state.poly_df = pd.DataFrame()
 
-st.sidebar.markdown("---")
-debug_paginacion = st.sidebar.checkbox("🔧 Mostrar diagnostico de paginacion", value=True)
-
-now = time.time()
-should_fetch = st.sidebar.button("Consultar API")
-
-if should_fetch:
-    raw = obtener_datos_pag(API_URL, headers, body, debug=debug_paginacion, limite_filas=limite_filas)
-    if not raw:
-        st.warning("No se recibieron datos de la API.")
-        st.stop()
-    df_nuevo = flatten_results(raw)
-    if df_nuevo.empty:
-        st.warning("No se recibieron datos.")
-        st.stop()
-    # El spatial join corre UNA sola vez por consulta nueva (no en cada rerun:
-    # cambiar el filtro de distrito o el checkbox de puntos ya no lo recalcula).
-    df_nuevo = asignar_distritos(df_nuevo, distritos)
-    st.session_state.poly_df = df_nuevo
-    st.session_state.poly_last_fetch_ts = now
-
+# Los datos usados para poblar estas opciones vienen de la ULTIMA consulta ya
+# guardada en session_state (puede estar vacia si todavia no se ha consultado
+# la API -- el boton "Consultar API" vive en "Resto de filtros", mas abajo).
 df = st.session_state.poly_df
-
-if st.session_state.poly_last_fetch_ts:
-    ultima = datetime.fromtimestamp(st.session_state.poly_last_fetch_ts, tz=zona_local)
-    st.caption(f"Ultima consulta a la API: {ultima.strftime('%Y-%m-%d %H:%M:%S')}")
-
-# ===========================================================
-# FILTRO POR DISTRITO SELECCIONADO (el spatial join ya se hizo al consultar)
-# ===========================================================
-st.caption(f"Poligonos de distritos cargados: {len(distritos)}")
-
-if df.empty:
-    st.info("👈 Ejecuta la consulta para ver el mapa y la tabla por distrito.")
-    st.stop()
-
-sin_match = df["distrito"].isna().sum() if "distrito" in df.columns else 0
-if sin_match:
-    st.caption(f"⚠️ {sin_match} de {len(df)} muestras sin coordenadas validas o fuera de los poligonos cargados.")
-
-# Deteccion dinamica de la columna de tecnologia (el nombre exacto puede variar
-# segun el perfil: "technology", "subtechnology", etc.)
 col_tech = next((c for c in ["technology", "subtechnology", "tech", "accessTechnology"] if c in df.columns), None)
 
 st.sidebar.markdown("---")
@@ -880,6 +775,135 @@ operador_sel = st.sidebar.multiselect(
     "Operador — podes elegir varios", operadores_disponibles,
     help="Sin nada seleccionado = todos los operadores.",
 )
+
+# ===========================================================
+# 4) RESTO DE FILTROS (sidebar): tipos de prueba, limite de descarga,
+#    detalle del mapa, diagnostico y el boton "Consultar API"
+# ===========================================================
+st.sidebar.markdown("## ⚙️ Resto de Filtros")
+
+st.sidebar.markdown("---")
+st.sidebar.header("Tipos de prueba (programs)")
+programas = st.sidebar.multiselect(
+    "Selecciona programs",
+    [
+        "http-down-burst-test", "http-upload-burst-test", "ping-test", "network",
+        "voice-out", "voice-polqa", "sms-mo",
+    ],
+    default=[
+        "ping-test", "http-down-burst-test", "http-upload-burst-test",
+        "voice-out", "voice-polqa", "sms-mo",
+    ],
+)
+
+st.sidebar.markdown("---")
+st.sidebar.header("Limite de descarga")
+limite_filas = st.sidebar.number_input(
+    "Maximo de filas a traer (0 = sin limite)",
+    min_value=0, max_value=2_000_000, value=50_000, step=10_000,
+    help="Rangos de fecha muy amplios pueden tener cientos de miles de filas "
+         "(cada pagina son ~10,000 y la API limita a ~1 peticion/seg, asi que "
+         "traer todo puede tardar varios minutos). Este limite corta la "
+         "descarga cuando se alcanza, mostrando un aviso.",
+)
+solo_validas = st.sidebar.checkbox(
+    "Traer solo muestras validas (success=1, exitCode=0)",
+    value=False,
+    help="Filtra del lado del servidor (menos filas para transferir y "
+         "paginar = mas rapido), pero el conteo de pruebas por distrito ya "
+         "no incluira los intentos fallidos/de sonda con averia.",
+)
+
+st.sidebar.markdown("---")
+st.sidebar.header("Detalle del mapa")
+simplificacion_m = st.sidebar.slider(
+    "Simplificacion de poligonos (metros)",
+    min_value=0, max_value=100, step=5,
+    key="poly_simplificacion_m",
+    help="0 = geometria original del IGN (mas fiel, mapa mas pesado). "
+         "Valores altos deforman distritos pequenos/urbanos.",
+)
+
+PALETAS_MAPA = {
+    "Amarillo-Naranja-Rojo": "YlOrRd_09",
+    "Amarillo-Verde-Azul": "YlGnBu_09",
+    "Azules": "Blues_09",
+    "Verdes": "Greens_09",
+    "Purpuras": "Purples_09",
+    "Rojo-Purpura": "RdPu_09",
+    "Naranjas": "OrRd_09",
+    "Viridis": "viridis",
+    "Plasma": "plasma",
+}
+paleta_label = st.sidebar.selectbox("Escala de color del mapa", list(PALETAS_MAPA.keys()), index=0)
+paleta_mapa = getattr(cm.linear, PALETAS_MAPA[paleta_label])
+
+# ===========================================================
+# CONFIGURACION API MEDUX (necesita programas/fechas/limite ya elegidos arriba)
+# ===========================================================
+API_URL = "https://medux-ids.caseonit.com/api/results"
+headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+body = {
+    "tsStart": ts_start,
+    "tsEnd": ts_end,
+    "format": "raw",
+    "timezone": "America/Costa_Rica",
+    "programs": programas,
+    "probes": [str(p) for p in probes if pd.notna(p)],
+}
+if solo_validas:
+    body["conditions"] = [
+        {"parameters": [{"field": "success"}], "operator": "eq", "value": 1},
+        {"parameters": [{"field": "exitCode"}], "operator": "eq", "value": 0},
+    ]
+
+st.sidebar.markdown("---")
+debug_paginacion = st.sidebar.checkbox("🔧 Mostrar diagnostico de paginacion", value=True)
+
+now = time.time()
+should_fetch = st.sidebar.button("Consultar API")
+
+if should_fetch:
+    raw = obtener_datos_pag(API_URL, headers, body, debug=debug_paginacion, limite_filas=limite_filas)
+    if not raw:
+        st.warning("No se recibieron datos de la API.")
+        st.stop()
+    df_nuevo = flatten_results(raw)
+    if df_nuevo.empty:
+        st.warning("No se recibieron datos.")
+        st.stop()
+    # El spatial join corre UNA sola vez por consulta nueva (no en cada rerun:
+    # cambiar el filtro de distrito o el checkbox de puntos ya no lo recalcula).
+    df_nuevo = asignar_distritos(df_nuevo, distritos)
+    st.session_state.poly_df = df_nuevo
+    st.session_state.poly_last_fetch_ts = now
+
+# Se vuelve a leer de session_state (por si el fetch de arriba acaba de
+# actualizarlo en esta misma corrida) para que el resto del script -- mapa,
+# tabla, y el recalculo de col_tech de abajo -- ya use los datos frescos.
+df = st.session_state.poly_df
+
+if st.session_state.poly_last_fetch_ts:
+    ultima = datetime.fromtimestamp(st.session_state.poly_last_fetch_ts, tz=zona_local)
+    st.caption(f"Ultima consulta a la API: {ultima.strftime('%Y-%m-%d %H:%M:%S')}")
+
+# ===========================================================
+# FILTRO POR DISTRITO SELECCIONADO (el spatial join ya se hizo al consultar)
+# ===========================================================
+st.caption(f"Poligonos de distritos cargados: {len(distritos)}")
+
+if df.empty:
+    st.info("👈 Ejecuta la consulta para ver el mapa y la tabla por distrito.")
+    st.stop()
+
+sin_match = df["distrito"].isna().sum() if "distrito" in df.columns else 0
+if sin_match:
+    st.caption(f"⚠️ {sin_match} de {len(df)} muestras sin coordenadas validas o fuera de los poligonos cargados.")
+
+# Recalculo de la columna de tecnologia con el df YA fresco (el que se uso
+# para poblar el selector de "Filtro Tecnologia y Operador" mas arriba pudo
+# quedarse con la version anterior si esta es la primera consulta).
+col_tech = next((c for c in ["technology", "subtechnology", "tech", "accessTechnology"] if c in df.columns), None)
 
 # Filtrar el dataframe segun Provincia/Canton/Distrito/Tecnologia/Operador.
 # "Distrito" (multiselect de tuplas distrito+canton+provincia) es el mas
