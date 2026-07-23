@@ -123,15 +123,28 @@ zona_local = pytz.timezone(tz_map[tz_label])
 # ===========================================================
 # SIDEBAR - Actualizacion en tiempo real
 # ===========================================================
+# NOTA: se elimino el auto-refresh automatico (tanto el componente externo
+# streamlit-autorefresh, que fallaba en cargar sus assets JS, como el
+# <meta http-equiv="refresh">, que provoca recargas COMPLETAS de pagina no
+# cancelables -- si la app esta embebida en un iframe/portal, la sesion se
+# puede perder en cada recarga y el checkbox vuelve a su valor por defecto,
+# generando un loop de refresco infinito e imposible de apagar desde la UI).
+# El flujo ahora es manual: boton "Consultar API" para traer datos nuevos.
 st.sidebar.markdown("---")
-st.sidebar.header("Actualizacion automatica")
-refresh_seconds = st.sidebar.slider("Frecuencia de refresco (segundos)", 10, 300, 60)
+st.sidebar.header("Actualizacion")
+refresh_seconds = st.sidebar.slider(
+    "Antiguedad maxima antes de re-consultar (segundos)", 10, 300, 60,
+    help="Con 'Modo tiempo real' activo, el boton 'Consultar API' vuelve a "
+         "traer datos si la ultima consulta tiene mas de este tiempo. No hay "
+         "recarga automatica de pagina: hay que hacer clic en el boton.",
+)
 usar_real_time = st.sidebar.checkbox("Modo tiempo real", value=True)
 if usar_real_time:
-    # Meta-refresh en HTML puro: recarga la pagina cada N segundos sin
-    # depender del componente externo streamlit-autorefresh (su frontend JS
-    # a veces no carga segun la red/proxy de donde este desplegada la app).
-    st.markdown(f'<meta http-equiv="refresh" content="{refresh_seconds}">', unsafe_allow_html=True)
+    st.sidebar.caption(
+        "Sin recarga automatica de pagina. Hace clic en 'Consultar API' "
+        "para traer datos frescos (o vuelve a traerlos solos si ya paso el "
+        "tiempo configurado arriba y interactuas con algo en la app)."
+    )
 
 REALTIME_HOURS = 8
 
