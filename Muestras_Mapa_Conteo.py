@@ -482,12 +482,13 @@ def tabla_conteo_distrito(df, col_tech=None):
 # MAPA CHOROPLETH POR DISTRITO + PUNTOS OPCIONALES
 # ===========================================================
 def construir_mapa(distritos, conteo_por_distrito, df_puntos=None, mostrar_puntos=False,
-                    bounds=None, distritos_resaltados=None):
+                    bounds=None, distritos_resaltados=None, paleta=None):
     m = folium.Map(location=[9.7489, -83.7534], zoom_start=8, tiles="cartodbpositron")
 
     distritos_resaltados = distritos_resaltados or set()
     max_count = max(conteo_por_distrito.values(), default=0)
-    colormap = cm.linear.YlOrRd_09.scale(0, max_count if max_count > 0 else 1)
+    paleta = paleta or cm.linear.YlOrRd_09
+    colormap = paleta.scale(0, max_count if max_count > 0 else 1)
     colormap.caption = "Pruebas por distrito"
 
     # Una sola capa GeoJson con los 494 distritos (mucho mas rapido que 494
@@ -594,6 +595,20 @@ simplificacion_m = st.sidebar.slider(
          "Valores altos deforman distritos pequenos/urbanos.",
 )
 distritos = cargar_distritos_wfs(simplificacion_m)
+
+PALETAS_MAPA = {
+    "Amarillo-Naranja-Rojo": "YlOrRd_09",
+    "Amarillo-Verde-Azul": "YlGnBu_09",
+    "Azules": "Blues_09",
+    "Verdes": "Greens_09",
+    "Purpuras": "Purples_09",
+    "Rojo-Purpura": "RdPu_09",
+    "Naranjas": "OrRd_09",
+    "Viridis": "viridis",
+    "Plasma": "plasma",
+}
+paleta_label = st.sidebar.selectbox("Escala de color del mapa", list(PALETAS_MAPA.keys()), index=0)
+paleta_mapa = getattr(cm.linear, PALETAS_MAPA[paleta_label])
 
 st.sidebar.markdown("---")
 st.sidebar.header("Filtrar por distrito")
@@ -764,7 +779,7 @@ conteo_por_distrito = {
 }
 mapa = construir_mapa(
     distritos, conteo_por_distrito, df_puntos=df_filtrado, mostrar_puntos=mostrar_puntos,
-    bounds=bounds_seleccion, distritos_resaltados=nombres_resaltados,
+    bounds=bounds_seleccion, distritos_resaltados=nombres_resaltados, paleta=paleta_mapa,
 )
 # components.html (en vez de st_folium) evita el puente bidireccional JS<->Python
 # que streamlit-folium reconstruye en cada rerun; aqui es solo un iframe estatico.
