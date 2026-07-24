@@ -41,6 +41,7 @@ Orden del sidebar (de arriba a abajo):
 import time
 from datetime import datetime, timedelta
 
+import numpy as np
 import pandas as pd
 import pytz
 import requests
@@ -48,7 +49,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 import folium
 import branca.colormap as cm
-from shapely.geometry import shape, Point, mapping
+from shapely.geometry import shape, mapping
+from shapely import points as shapely_points
 from shapely.strtree import STRtree
 from shapely.ops import transform as shapely_transform
 from pyproj import Transformer
@@ -308,7 +310,17 @@ def cargar_distritos_wfs(tolerancia_m=10):
 
 
 def asignar_distritos(df, distritos, col_lat="latitude", col_lon="longitude"):
-    """Spatial join: asigna cada muestra a su distrito."""
+    """Spatial join: asigna cada muestra a su distrito.
+
+    OPTIMIZACION: la version anterior usaba df.apply(axis=1) llamando una
+    funcion Python fila por fila -- con miles de muestras esto es lento por
+    el overhead propio de pandas (crear una Series por fila) sumado al de
+    cada llamada individual a Point()/tree.query()/.contains(). shapely>=2.0
+    permite construir TODOS los puntos de una sola vez (shapely.points, en
+    C) y consultar el STRtree con un array completo en una sola llamada
+    (tree.query(array, predicate=...)), sin loop en Python por fila. Con
+    ~30,000 muestras esto pasa de tomar varios segundos a milisegundos.
+    """
     df = df.copy()
     df["distrito"] = None
     df["canton"] = None
@@ -320,31 +332,44 @@ def asignar_distritos(df, distritos, col_lat="latitude", col_lon="longitude"):
     if col_lat not in df.columns or col_lon not in df.columns:
         return df
 
+    lat_arr = pd.to_numeric(df[col_lat], errors="coerce").to_numpy()
+    lon_arr = pd.to_numeric(df[col_lon], errors="coerce").to_numpy()
+    validos = ~pd.isna(lat_arr) & ~pd.isna(lon_arr) & ~((lat_arr == 0) & (lon_arr == 0))
+    if not validos.any():
+        return df
+
     geoms = [d["geometry"] for d in distritos]
     tree = STRtree(geoms)
 
-    def lookup(lat, lon):
-        try:
-            lat = float(lat)
-            lon = float(lon)
-        except (TypeError, ValueError):
-            return None
-        if pd.isna(lat) or pd.isna(lon) or (lat == 0 and lon == 0):
-            return None
-        pt = Point(lon, lat)
-        candidatos = tree.query(pt)  # indices de bbox candidatos (shapely >= 2.0)
-        for idx in candidatos:
-            if geoms[idx].contains(pt) or geoms[idx].intersects(pt):
-                return idx
-        return None
+    idx_validos = np.where(validos)[0]
+    puntos = shapely_points(lon_arr[idx_validos], lat_arr[idx_validos])
 
-    # object dtype evita que pandas convierta los indices (int) a float cuando
-    # se mezclan con None dentro de la Series.
-    idxs = df.apply(lambda row: lookup(row.get(col_lat), row.get(col_lon)), axis=1).astype(object)
-    df["distrito"] = idxs.apply(lambda i: distritos[int(i)]["distrito"] if pd.notna(i) else None)
-    df["canton"] = idxs.apply(lambda i: distritos[int(i)]["canton"] if pd.notna(i) else None)
-    df["provincia"] = idxs.apply(lambda i: distritos[int(i)]["provincia"] if pd.notna(i) else None)
-    df["codigo_dta"] = idxs.apply(lambda i: distritos[int(i)]["codigo_dta"] if pd.notna(i) else None)
+    # tree.query con un array de geometrias hace la consulta COMPLETA en
+    # codigo compilado (GEOS): devuelve pares (indice-en-puntos, indice-en-
+    # distritos) para todo el batch de una sola vez.
+    pares = tree.query(puntos, predicate="intersects")
+    asignado = {}
+    for i_pt, i_geom in zip(pares[0], pares[1]):
+        idx_original = idx_validos[i_pt]
+        if idx_original not in asignado:  # se queda con el primer match
+            asignado[idx_original] = i_geom
+
+    n = len(df)
+    distrito_arr = [None] * n
+    canton_arr = [None] * n
+    provincia_arr = [None] * n
+    codigo_arr = [None] * n
+    for idx_original, i_geom in asignado.items():
+        d = distritos[i_geom]
+        distrito_arr[idx_original] = d["distrito"]
+        canton_arr[idx_original] = d["canton"]
+        provincia_arr[idx_original] = d["provincia"]
+        codigo_arr[idx_original] = d["codigo_dta"]
+
+    df["distrito"] = distrito_arr
+    df["canton"] = canton_arr
+    df["provincia"] = provincia_arr
+    df["codigo_dta"] = codigo_arr
     return df
 
 
@@ -375,29 +400,44 @@ def preparar_test_con_target(df):
     return df, n_targets
 
 
-COLUMNAS_NO_CONTEO = {"codigo_dta", "distrito", "canton", "provincia", "tecnologia"}
+COLUMNAS_NO_CONTEO = {"codigo_dta", "distrito", "canton", "provincia", "tecnologia", "Cumple"}
+
+# Liberty en sms-mo nunca llega a 100 muestras (limitacion conocida del
+# operador/program) -- se excluye de la evaluacion de "Cumple" para no
+# marcar como "No cumple" filas que en realidad estan bien.
+def _es_columna_excluida_de_cumple(nombre_columna):
+    return nombre_columna.startswith("Liberty") and "sms" in nombre_columna.lower()
 
 
 def _color_cantidad_muestras(valor):
-    """Resalta cada celda de conteo: verde si > 100, rojo si < 100 (100
-    exacto queda sin resaltar, al no ser ni 'superior' ni 'inferior')."""
+    """Resalta cada celda de conteo: verde si >= 100, rojo si < 100."""
     try:
         v = float(valor)
     except (TypeError, ValueError):
         return ""
-    if v > 100:
+    if v >= 100:
         return "background-color: #c6efce; color: #006100"
-    if v < 100:
-        return "background-color: #ffc7ce; color: #9c0006"
+    return "background-color: #ffc7ce; color: #9c0006"
+
+
+def _color_cumple(valor):
+    if valor == "✅ Cumple":
+        return "background-color: #c6efce; color: #006100; font-weight: 600"
+    if valor == "❌ No cumple":
+        return "background-color: #ffc7ce; color: #9c0006; font-weight: 600"
     return ""
 
 
 def estilizar_tabla_conteo(tabla):
     """Aplica el resaltado verde/rojo a todas las columnas de conteo (ISP ·
     program y Total), dejando sin color las columnas de identificacion del
-    distrito (codigo_dta, distrito, canton, provincia, tecnologia)."""
+    distrito (codigo_dta, distrito, canton, provincia, tecnologia) y
+    resaltando aparte la columna 'Cumple'."""
     columnas_conteo = [c for c in tabla.columns if c not in COLUMNAS_NO_CONTEO]
-    return tabla.style.map(_color_cantidad_muestras, subset=columnas_conteo)
+    estilo = tabla.style.map(_color_cantidad_muestras, subset=columnas_conteo)
+    if "Cumple" in tabla.columns:
+        estilo = estilo.map(_color_cumple, subset=["Cumple"])
+    return estilo
 
 
 def tabla_conteo_distrito(df, col_tech=None):
@@ -445,8 +485,21 @@ def tabla_conteo_distrito(df, col_tech=None):
     pivot.columns = [f"{isp} · {test}" for isp, test in pivot.columns]
     if usar_tech:
         pivot = pivot.rename_axis(index={col_tech: "tecnologia"})
+    columnas_indicadores = list(pivot.columns)  # antes de agregar "Total"
     pivot["Total"] = pivot.sum(axis=1)
     pivot = pivot.reset_index().sort_values("Total", ascending=False)
+
+    # "Cumple": verifica que TODOS los indicadores (ISP · program) tengan
+    # 100 o mas muestras -- excepto Liberty · sms-mo, que nunca llega a 100
+    # (limitacion conocida, no una falla real de cobertura).
+    columnas_para_cumplir = [
+        c for c in columnas_indicadores if not _es_columna_excluida_de_cumple(c)
+    ]
+    if columnas_para_cumplir:
+        cumple_bool = (pivot[columnas_para_cumplir] >= 100).all(axis=1)
+    else:
+        cumple_bool = pd.Series(True, index=pivot.index)
+    pivot["Cumple"] = cumple_bool.map({True: "✅ Cumple", False: "❌ No cumple"})
     return pivot
 
 
@@ -1046,7 +1099,11 @@ if tabla.empty:
     st.info("No hay suficientes datos (con coordenadas validas) para generar la tabla.")
 else:
     st.caption(f"{len(tabla)} distrito(s) con muestras — si no ves todos, desplazate dentro de la tabla (scroll interno).")
-    st.caption("🟩 Verde: mas de 100 muestras · 🟥 Rojo: menos de 100 muestras (por celda).")
+    st.caption(
+        "🟩 Verde: 100 o mas muestras · 🟥 Rojo: menos de 100 muestras (por celda). "
+        "Columna **Cumple**: ✅ si todos los indicadores llegan a 100+ muestras, "
+        "❌ si falta alguno (Liberty · sms-mo se excluye de esta evaluacion)."
+    )
     st.dataframe(estilizar_tabla_conteo(tabla), use_container_width=True, hide_index=True, height=450)
     st.download_button(
         "⬇️ Descargar tabla (CSV)",
