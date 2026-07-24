@@ -20,6 +20,7 @@ Requisitos adicionales sobre el dashboard original (agregar a requirements.txt):
     pyproj
     folium
     branca
+    jinja2>=3.1.2   # requerido por pandas Styler (resaltado verde/rojo de la tabla)
 
 Notas de rendimiento (ver seccion "OPTIMIZACION"):
     - Los poligonos se simplifican y se cachean 24h (no se recalculan en cada rerun).
@@ -372,6 +373,31 @@ def preparar_test_con_target(df):
 
     n_targets = df.loc[con_target, "test"].nunique()
     return df, n_targets
+
+
+COLUMNAS_NO_CONTEO = {"codigo_dta", "distrito", "canton", "provincia", "tecnologia"}
+
+
+def _color_cantidad_muestras(valor):
+    """Resalta cada celda de conteo: verde si > 100, rojo si < 100 (100
+    exacto queda sin resaltar, al no ser ni 'superior' ni 'inferior')."""
+    try:
+        v = float(valor)
+    except (TypeError, ValueError):
+        return ""
+    if v > 100:
+        return "background-color: #c6efce; color: #006100"
+    if v < 100:
+        return "background-color: #ffc7ce; color: #9c0006"
+    return ""
+
+
+def estilizar_tabla_conteo(tabla):
+    """Aplica el resaltado verde/rojo a todas las columnas de conteo (ISP ·
+    program y Total), dejando sin color las columnas de identificacion del
+    distrito (codigo_dta, distrito, canton, provincia, tecnologia)."""
+    columnas_conteo = [c for c in tabla.columns if c not in COLUMNAS_NO_CONTEO]
+    return tabla.style.map(_color_cantidad_muestras, subset=columnas_conteo)
 
 
 def tabla_conteo_distrito(df, col_tech=None):
@@ -1020,7 +1046,8 @@ if tabla.empty:
     st.info("No hay suficientes datos (con coordenadas validas) para generar la tabla.")
 else:
     st.caption(f"{len(tabla)} distrito(s) con muestras — si no ves todos, desplazate dentro de la tabla (scroll interno).")
-    st.dataframe(tabla, use_container_width=True, hide_index=True, height=450)
+    st.caption("🟩 Verde: mas de 100 muestras · 🟥 Rojo: menos de 100 muestras (por celda).")
+    st.dataframe(estilizar_tabla_conteo(tabla), use_container_width=True, hide_index=True, height=450)
     st.download_button(
         "⬇️ Descargar tabla (CSV)",
         data=tabla.to_csv(index=False).encode("utf-8"),
