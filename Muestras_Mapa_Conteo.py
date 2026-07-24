@@ -765,6 +765,12 @@ col_tech = next((c for c in ["technology", "subtechnology", "tech", "accessTechn
 
 st.sidebar.markdown("---")
 st.sidebar.header("Filtrar por tecnologia y operador")
+if df.empty:
+    st.sidebar.caption(
+        "ℹ️ Estas opciones se llenan con los datos de la ultima consulta. "
+        "Baja hasta 'Consultar API' (en Resto de filtros) y ejecuta una "
+        "consulta para poder filtrar por tecnologia/operador."
+    )
 if col_tech:
     tecnologias_disponibles = sorted(df[col_tech].dropna().astype(str).unique())
     tecnologia_sel = st.sidebar.multiselect(
@@ -772,8 +778,10 @@ if col_tech:
         tecnologias_disponibles,
         help="Sin nada seleccionado = todas las tecnologias.",
     )
-else:
+elif not df.empty:
     st.sidebar.caption("No se encontro una columna de tecnologia en los datos traidos.")
+    tecnologia_sel = []
+else:
     tecnologia_sel = []
 
 # --- Selector de Operador (ISP), mismo estilo que Distrito/Tecnologia (multiselect).
@@ -884,6 +892,13 @@ if should_fetch:
     df_nuevo = asignar_distritos(df_nuevo, distritos)
     st.session_state.poly_df = df_nuevo
     st.session_state.poly_last_fetch_ts = now
+    # El filtro de "Tecnologia y Operador" (sidebar) se dibuja MAS ARRIBA en
+    # el script que este boton -- en esta misma corrida ya se renderizo con
+    # el df VIEJO (antes de este fetch), asi que sus opciones quedarian
+    # desactualizadas hasta la proxima interaccion. Forzar un rerun aqui hace
+    # que la corrida siguiente ya lea el df fresco de session_state ANTES de
+    # dibujar ese filtro, sin necesidad de que el usuario toque nada mas.
+    st.rerun()
 
 # Se vuelve a leer de session_state (por si el fetch de arriba acaba de
 # actualizarlo en esta misma corrida) para que el resto del script -- mapa,
