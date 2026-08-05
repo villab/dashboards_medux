@@ -1,5 +1,5 @@
 """
-Medux Monitoring Dashboard - Vista por Poligonos (Distritos de Costa Rica)
+Medux Monitoring Dashboard RACSA - Vista por Poligonos (Distritos de Costa Rica)
 ===========================================================================
 Portal independiente que reutiliza la misma conexion a la API MedUX IDS del
 dashboard principal, pero ubica cada resultado dentro de su poligono
