@@ -883,12 +883,12 @@ st.sidebar.header("Tipos de prueba (programs)")
 programas = st.sidebar.multiselect(
     "Selecciona programs",
     [
-        "http-down-burst-test", "http-upload-burst-test", "ping-test", "network",
-        "voice-out", "voice-polqa", "sms-mo",
+        "cloud-download", "cloud-upload", "ping-test", "network",
+        "confess-chrome", "youtube-api", "dropbox-get","http-down-burst-test","http-upload-burst-test"
     ],
     default=[
-        "ping-test", "http-down-burst-test", "http-upload-burst-test",
-        "voice-out", "voice-polqa", "sms-mo",
+        "cloud-download", "cloud-upload", "ping-test", "network",
+        "confess-chrome", "youtube-api", "dropbox-get","http-down-burst-test","http-upload-burst-test"
     ],
 )
 
