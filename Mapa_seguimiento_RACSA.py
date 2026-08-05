@@ -73,11 +73,13 @@ ISP_NAME_MAP = {
     "tigo_cr": "Tigo",
     "kolbi_cr": "Kolbi",
     "telecable_cr": "Telecable",
+    "racsa_cr": "Racsa",
 }
 ISP_COLOR_MAP = {
     "Liberty": "#6F2DA8",
     "Claro": "#D52B1E",
     "Tigo": "#0033A0",
+    "Racsa": "#0033A0",
     "Kolbi": "#009739",
     "Telecable": "#FF6600",
 }
