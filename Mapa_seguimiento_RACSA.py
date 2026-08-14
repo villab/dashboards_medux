@@ -887,7 +887,7 @@ programas = st.sidebar.multiselect(
         "confess-chrome", "youtube-api", "dropbox-get","http-down-burst-test","http-upload-burst-test"
     ],
     default=[
-        "cloud-download", "cloud-upload", "ping-test", "network",
+        "cloud-download", "cloud-upload", "ping-test", 
         "confess-chrome", "youtube-api", "dropbox-get","http-down-burst-test","http-upload-burst-test"
     ],
 )
