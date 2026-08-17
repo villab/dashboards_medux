@@ -152,8 +152,8 @@ KML_NS = {"kml": "http://www.opengis.net/kml/2.2"}
 # ===========================================================
 # CONFIGURACION INICIAL STREAMLIT
 # ===========================================================
-st.set_page_config(page_title="Medux - Vista por Poligonos", layout="wide")
-st.markdown("### COSTA RICA - RESULTADOS POR DISTRITO (Poligonos WFS / IGN)")
+st.set_page_config(page_title="Medux - RACSA", layout="wide")
+st.markdown("### COSTA RICA RACSA - RECORRIDOS 2026 - 2027")
 
 # ===========================================================
 # TOKEN Y PROBES DESDE SECRETS
@@ -432,7 +432,7 @@ def resolver_ubicacion_sondas(api_url, headers, probes, ts_start, ts_end, distri
     if programas_muestra is None:
         programas_muestra = [
             "network", "ping-test", "http-down-burst-test", "http-upload-burst-test",
-            "voice-out", "voice-polqa", "sms-mo",
+            "youtube-api", "cloud-upload", "cloud-download","dropbox-get"
         ]
     body = {
         "tsStart": ts_start,
