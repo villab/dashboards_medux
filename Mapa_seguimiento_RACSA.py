@@ -655,7 +655,7 @@ def asignar_distrito_a_manchas(manchas, distritos):
     Devuelve una copia de 'manchas' con las claves 'distrito'/'canton'/
     'provincia' agregadas (None si la mancha no cae dentro de ningun
     distrito cargado -- por ejemplo si esta fuera de Costa Rica o el WFS
-    no cubre esa zona).
+    no cubre esa zona). 
     """
     if not manchas or not distritos:
         return manchas
@@ -1501,12 +1501,12 @@ st.sidebar.header("Tipos de prueba (programs)")
 programas = st.sidebar.multiselect(
     "Selecciona programs",
     [
-        "http-down-burst-test", "http-upload-burst-test", "ping-test", "network",
-        "voice-out", "voice-polqa", "sms-mo",
+        "cloud-download", "cloud-upload", "ping-test", "network",
+        "confess-chrome", "youtube-api", "dropbox-get","http-down-burst-test","http-upload-burst-test"
     ],
     default=[
-        "ping-test", "http-down-burst-test", "http-upload-burst-test",
-        "voice-out", "voice-polqa", "sms-mo",
+        "cloud-download", "cloud-upload", "ping-test", 
+        "confess-chrome", "youtube-api", "dropbox-get","http-down-burst-test","http-upload-burst-test"
     ],
 )
 
