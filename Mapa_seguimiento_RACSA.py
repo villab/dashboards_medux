@@ -10,31 +10,28 @@ dashboard principal, pero ubica cada resultado dentro de su poligono
     CRS nativo: EPSG:8908 (CR-SIRGAS / CRTM05, metros)
     Atributos : PROVINCIA, CANTON, DISTRITO, CODIGO_DTA, ...
 
-Salidas principales (2 consultas INDEPENDIENTES, cada una con su propio
-rango de fechas y boton):
-    1) Mapa choropleth + puntos individuales -- boton "Consultar Mapa (raw)".
-       Sigue usando /api/results format=raw (paginado) + spatial join propio,
-       pensado para rangos cortos (horas/dias) ya que trae cada muestra.
-    2) Tabla de conteo de pruebas por Distrito x Program x ISP (x Tecnologia)
-       -- boton "Consultar Tabla (agregados)". Usa /api/results
-       format=aggregate (NO pagina, responde casi instantaneo sin importar
-       el volumen), asi que su rango puede ser de semanas o meses sin
-       volverse lento. Como "aggregate" no soporta breakdown por distrito
-       ni por target, se resuelve asi:
-         - Distrito: se ubica cada SONDA (probeId) en su distrito UNA sola
-           vez (no cada muestra), pidiendo una pagina raw chica y usando
-           lat/lon promedio por sonda (con autovalidacion de dispersion: si
-           una sonda muestra ubicaciones muy distintas entre si, se excluye
-           en vez de asumir que es fija).
-         - Ping-test por target: se pide un aggregate POR CADA IP destino
-           conocida (PING_TEST_TARGETS), usando el filtro "targets", en vez
-           de un breakdown por target (no soportado por la API).
-         - La 3ra dimension (tecnologia) se itera aparte (una llamada por
-           tecnologia) en vez de pedir 3 dimensiones de breakdown a la vez
-           (isp+technology+probeId), porque ese patron no esta confirmado
-           en ningun ejemplo de la documentacion de la API (si en el futuro
-           se confirma que funciona, se puede simplificar a una sola
-           llamada con breakdownBy=["isp","technology","probeId"]).
+Salidas principales (UNA sola consulta/boton -- "🔄 Consultar Mapa y Tabla" --
+alimenta ambas salidas con el MISMO dataframe raw):
+    1) Mapa choropleth + puntos individuales.
+    2) Tabla de conteo de pruebas por Distrito x Program x ISP (x Tecnologia),
+       calculada del mismo df raw ya filtrado (groupby simple, sin llamada
+       adicional a la API).
+    Ambas usan /api/results format=raw (paginado) + spatial join propio
+    (vectorizado con shapely/STRtree), pensado para rangos cortos
+    (horas/dias) ya que trae cada muestra individual.
+
+    NOTA (historial): se probo una variante con 2 botones independientes
+    (mapa en raw + tabla en base a /api/results format=aggregate, con su
+    propio rango de fechas mas amplio) para que la tabla pudiera cubrir
+    semanas/meses sin volverse lenta. Esa variante dependia de ubicar cada
+    SONDA (probeId) en su distrito por separado (resolver_ubicacion_sondas)
+    y no resulto confiable para el perfil de RACSA (la tabla quedaba vacia:
+    "no se pudo ubicar ninguna sonda en un distrito"), asi que se revirtio a
+    esta version de un solo boton. Las funciones de esa variante
+    (resolver_ubicacion_sondas, obtener_agregado, obtener_tecnologias_perfil,
+    parsear_respuesta_aggregate, construir_tabla_agregada) se dejan
+    definidas en el archivo por si se quiere retomar ese camino mas
+    adelante, pero NINGUN boton/seccion del sidebar las llama actualmente.
 
 Requisitos adicionales sobre el dashboard original (agregar a requirements.txt):
     shapely>=2.0
@@ -51,17 +48,16 @@ Notas de rendimiento:
     - El mapa se dibuja como UNA sola capa GeoJson (494 features en un solo layer)
       en vez de 494 capas individuales, y se renderiza con components.html en vez
       de streamlit-folium (evita el puente bidireccional que agrega latencia).
-    - La TABLA ya no depende del volumen de muestras: usa "aggregate" (el
-      servidor agrega) en vez de traer y contar cada fila del lado del cliente.
+    - La TABLA se arma con un simple groupby sobre el df raw ya en memoria
+      (mismo que usa el mapa) -- no hace falta ninguna consulta adicional.
 
 Orden del sidebar (de arriba a abajo):
-    1) Filtro Fecha (una seccion para el mapa, otra independiente para la tabla)
+    1) Filtro Fecha (una sola, compartida por mapa y tabla)
     2) Filtro Distrito
     3) Filtro tecnologia y operador
     4) Capas adicionales (manchas de cobertura KMZ / radiobases)
     5) Resto de filtros (tipos de prueba, limite de descarga, detalle del
-       mapa, diagnostico, y los botones "Consultar Mapa (raw)" /
-       "Consultar Tabla (agregados)")
+       mapa, diagnostico, y el boton "🔄 Consultar Mapa y Tabla")
 
 Capas adicionales (especificas de este proyecto RACSA, no existen en el
 dashboard Sutel original):
@@ -1260,42 +1256,9 @@ ts_end = int(dt_fin_local.astimezone(pytz.utc).timestamp() * 1000)
 
 inicio_local_str = datetime.fromtimestamp(ts_start / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
 fin_local_str = datetime.fromtimestamp(ts_end / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')
-st.sidebar.markdown("### Consulta activa (mapa)")
+st.sidebar.markdown("### Consulta activa")
 st.sidebar.write(f"Inicio: {inicio_local_str}")
 st.sidebar.write(f"Fin: {fin_local_str}")
-
-# --- Fecha INDEPENDIENTE para la tabla (agregados) -----------------------
-# El mapa sigue con el rango de arriba (raw + spatial join, limitado en
-# puntos). La tabla usa "aggregate" -- no pagina, responde rapido sin
-# importar el volumen -- asi que su rango puede ser mucho mas amplio
-# (semanas o meses) sin que la consulta se vuelva lenta.
-st.sidebar.markdown("---")
-st.sidebar.header("Fecha (Tabla · agregados)")
-if "poly_tabla_fecha_inicio" not in st.session_state:
-    ahora_local = datetime.now(zona_local)
-    inicio_defecto_tabla = ahora_local - timedelta(days=30)
-    st.session_state.poly_tabla_fecha_inicio = inicio_defecto_tabla.date()
-    st.session_state.poly_tabla_hora_inicio = inicio_defecto_tabla.time()
-    st.session_state.poly_tabla_fecha_fin = ahora_local.date()
-    st.session_state.poly_tabla_hora_fin = ahora_local.time()
-
-tabla_fecha_inicio = st.sidebar.date_input("Fecha inicio (tabla)", key="poly_tabla_fecha_inicio")
-tabla_hora_inicio = st.sidebar.time_input("Hora inicio (tabla)", key="poly_tabla_hora_inicio")
-tabla_fecha_fin = st.sidebar.date_input("Fecha fin (tabla)", key="poly_tabla_fecha_fin")
-tabla_hora_fin = st.sidebar.time_input("Hora fin (tabla)", key="poly_tabla_hora_fin")
-
-dt_tabla_inicio_naive = datetime.combine(tabla_fecha_inicio, tabla_hora_inicio)
-dt_tabla_fin_naive = datetime.combine(tabla_fecha_fin, tabla_hora_fin)
-dt_tabla_inicio_local = zona_local.localize(dt_tabla_inicio_naive, is_dst=None)
-dt_tabla_fin_local = zona_local.localize(dt_tabla_fin_naive, is_dst=None)
-if dt_tabla_inicio_local >= dt_tabla_fin_local:
-    st.error(f"Rango de fechas de la tabla invalido.\nInicio: {dt_tabla_inicio_local}\nFin: {dt_tabla_fin_local}")
-    st.stop()
-ts_tabla_start = int(dt_tabla_inicio_local.astimezone(pytz.utc).timestamp() * 1000)
-ts_tabla_end = int(dt_tabla_fin_local.astimezone(pytz.utc).timestamp() * 1000)
-st.sidebar.markdown("### Consulta activa (tabla)")
-st.sidebar.write(f"Inicio: {datetime.fromtimestamp(ts_tabla_start / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')}")
-st.sidebar.write(f"Fin: {datetime.fromtimestamp(ts_tabla_end / 1000, tz=zona_local).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ===========================================================
 # 2) FILTRO DISTRITO (sidebar) - WFS de poligonos
@@ -1473,7 +1436,7 @@ mostrar_radiobases = st.sidebar.checkbox(
     + (f" ({radiobases_descartadas} descartada(s) por coordenadas invalidas)" if radiobases_descartadas else ""),
     help="Solo se dibujan las radiobases cuya 'mancha' (poligono KMZ) tiene "
          "al menos una muestra en la consulta/filtro actual del mapa (raw). "
-         "Hace falta correr '🗺️ Consultar Mapa (raw)' primero.",
+         "Hace falta correr '🔄 Consultar Mapa y Tabla' primero.",
     value=not radiobases_df.empty,
     disabled=radiobases_df.empty,
 )
@@ -1561,7 +1524,7 @@ st.sidebar.markdown("---")
 debug_paginacion = st.sidebar.checkbox("🔧 Mostrar diagnostico de paginacion", value=True)
 
 now = time.time()
-should_fetch = st.sidebar.button("🗺️ Consultar Mapa (raw)")
+should_fetch = st.sidebar.button("🔄 Consultar Mapa y Tabla")
 
 if should_fetch:
     raw = obtener_datos_pag(API_URL, headers, body, debug=debug_paginacion, limite_filas=limite_filas)
@@ -1575,6 +1538,10 @@ if should_fetch:
     # El spatial join corre UNA sola vez por consulta nueva (no en cada rerun:
     # cambiar el filtro de distrito o el checkbox de puntos ya no lo recalcula).
     df_nuevo = asignar_distritos(df_nuevo, distritos)
+    # Desglosa 'ping-test' por target/IP destino (una sola vez, no en cada
+    # rerun) -- la tabla de conteo mas abajo ya ve "ping-test (ip)" como si
+    # fuera un program mas, sin logica especial.
+    df_nuevo, _ = preparar_test_con_target(df_nuevo)
     st.session_state.poly_df = df_nuevo
     st.session_state.poly_last_fetch_ts = now
     # El filtro de "Tecnologia y Operador" (sidebar) se dibuja MAS ARRIBA en
@@ -1585,47 +1552,6 @@ if should_fetch:
     # dibujar ese filtro, sin necesidad de que el usuario toque nada mas.
     st.rerun()
 
-# --- Boton independiente para la TABLA (agregados) -----------------------
-# Usa su propio rango de fechas (arriba, "Fecha (Tabla · agregados)") y NO
-# depende de que el mapa ya se haya consultado.
-if "poly_tabla_df" not in st.session_state:
-    st.session_state.poly_tabla_df = pd.DataFrame()
-if "poly_tabla_last_fetch_ts" not in st.session_state:
-    st.session_state.poly_tabla_last_fetch_ts = 0.0
-if "poly_tabla_n_filas" not in st.session_state:
-    st.session_state.poly_tabla_n_filas = 0
-if "poly_tabla_conteo_targets" not in st.session_state:
-    st.session_state.poly_tabla_conteo_targets = {}
-if "poly_tabla_sondas_inconsistentes" not in st.session_state:
-    st.session_state.poly_tabla_sondas_inconsistentes = []
-
-should_fetch_tabla = st.sidebar.button("📋 Consultar Tabla (agregados)")
-
-if should_fetch_tabla:
-    with st.spinner("Resolviendo ubicacion de sondas..."):
-        ubicacion_sondas, sondas_inconsistentes = resolver_ubicacion_sondas(
-            API_URL, headers, probes, ts_tabla_start, ts_tabla_end, distritos,
-        )
-    if not ubicacion_sondas:
-        st.warning(
-            "No se pudo ubicar ninguna sonda en un distrito (revisa el rango de "
-            "fechas de la tabla o si las sondas reportan latitude/longitude)."
-        )
-        st.stop()
-    with st.spinner("Consultando agregados (rapido, sin paginar)..."):
-        tecnologias_perfil = obtener_tecnologias_perfil(API_BASE, headers)
-        tabla_nueva, n_filas_crudas, conteo_targets = construir_tabla_agregada(
-            API_URL, headers, ts_tabla_start, ts_tabla_end, programas, probes,
-            ubicacion_sondas, tecnologias_perfil,
-            tecnologia_sel=tecnologia_sel or None, operador_sel=operador_sel or None,
-        )
-    st.session_state.poly_tabla_df = tabla_nueva
-    st.session_state.poly_tabla_last_fetch_ts = now
-    st.session_state.poly_tabla_n_filas = n_filas_crudas
-    st.session_state.poly_tabla_conteo_targets = conteo_targets
-    st.session_state.poly_tabla_sondas_inconsistentes = sondas_inconsistentes
-    st.rerun()
-
 # Se vuelve a leer de session_state (por si el fetch de arriba acaba de
 # actualizarlo en esta misma corrida) para que el resto del script -- mapa,
 # tabla, y el recalculo de col_tech de abajo -- ya use los datos frescos.
@@ -1633,16 +1559,16 @@ df = st.session_state.poly_df
 
 if st.session_state.poly_last_fetch_ts:
     ultima = datetime.fromtimestamp(st.session_state.poly_last_fetch_ts, tz=zona_local)
-    st.caption(f"Ultima consulta al mapa (raw): {ultima.strftime('%Y-%m-%d %H:%M:%S')}")
+    st.caption(f"Ultima consulta: {ultima.strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ===========================================================
-# MAPA (independiente de la tabla -- sigue en raw + spatial join)
+# MAPA + TABLA (un solo boton/consulta -- ambos se arman del mismo df raw)
 # ===========================================================
 st.markdown("#### 🗺️ Mapa por Distrito")
 st.caption(f"Poligonos de distritos cargados: {len(distritos)}")
 
 if df.empty:
-    st.info("👈 Ejecuta '🗺️ Consultar Mapa (raw)' para ver el mapa.")
+    st.info("👈 Ejecuta '🔄 Consultar Mapa y Tabla' para ver el mapa y la tabla.")
 else:
     sin_match = df["distrito"].isna().sum() if "distrito" in df.columns else 0
     if sin_match:
@@ -1744,52 +1670,27 @@ else:
     # recortado/corrido hacia arriba, sin quedar centrado en Costa Rica.
     components.html(mapa.get_root().render(), height=620, scrolling=False)
 
-# ===========================================================
-# TABLA DE CONTEO POR DISTRITO x PROGRAM x ISP (independiente -- via aggregate)
-# ===========================================================
-st.markdown("#### 📋 Conteo de pruebas por Distrito x Program x ISP (agregados)")
-
-tabla = st.session_state.poly_tabla_df
-if st.session_state.poly_tabla_last_fetch_ts:
-    ultima_tabla = datetime.fromtimestamp(st.session_state.poly_tabla_last_fetch_ts, tz=zona_local)
-    st.caption(
-        f"Ultima consulta a la tabla (agregados): {ultima_tabla.strftime('%Y-%m-%d %H:%M:%S')} "
-        f"— {st.session_state.poly_tabla_n_filas:,} filas agregadas combinadas."
-    )
-
-sondas_inconsistentes = st.session_state.poly_tabla_sondas_inconsistentes
-if sondas_inconsistentes:
-    st.warning(
-        f"⚠️ {len(sondas_inconsistentes)} sonda(s) con ubicacion inconsistente entre "
-        f"muestras (posible reinstalacion o error de reporte) se excluyeron de la "
-        f"tabla: {', '.join(sondas_inconsistentes)}"
-    )
-
-conteo_targets = st.session_state.poly_tabla_conteo_targets
-if conteo_targets:
-    detalle_targets = " · ".join(f"{ip}: {n:,} muestras" for ip, n in conteo_targets.items())
-    if all(n > 0 for n in conteo_targets.values()):
-        st.caption(f"✅ ping-test desglosado por target ({len(conteo_targets)} IP conocidas) — {detalle_targets}")
+    # =======================================================
+    # TABLA DE CONTEO POR DISTRITO x PROGRAM x ISP -- se arma del MISMO df
+    # raw ya filtrado de arriba (sin boton ni consulta aparte, sin depender
+    # de resolver_ubicacion_sondas/aggregate -- ese camino no resulto
+    # confiable para el perfil de RACSA).
+    # =======================================================
+    st.markdown("#### 📋 Conteo de pruebas por Distrito x Program x ISP")
+    tabla = tabla_conteo_distrito(df_filtrado, col_tech=col_tech)
+    if tabla.empty:
+        st.info("No hay muestras con distrito asignado en el filtro/rango actual para armar la tabla.")
     else:
-        st.warning(f"⚠️ Alguno de los targets de ping-test no trajo muestras — {detalle_targets}")
-
-if tabla.empty:
-    st.info(
-        "👈 Ejecuta '📋 Consultar Tabla (agregados)' para ver el conteo. "
-        "Podes usar un rango de fechas mucho mas amplio que el mapa (hasta meses) "
-        "sin que se vuelva lento."
-    )
-else:
-    st.caption(f"{len(tabla)} fila(s) con muestras — si no ves todas, desplazate dentro de la tabla (scroll interno).")
-    st.caption(
-        "🟩 Verde: 100 o mas muestras · 🟥 Rojo: menos de 100 muestras (por celda). "
-        "Columna **Cumple**: ✅ si todos los indicadores llegan a 100+ muestras, "
-        "❌ si falta alguno (Liberty · sms-mo se excluye de esta evaluacion)."
-    )
-    st.dataframe(estilizar_tabla_conteo(tabla), use_container_width=True, hide_index=True, height=450)
-    st.download_button(
-        "⬇️ Descargar tabla (CSV)",
-        data=tabla.to_csv(index=False).encode("utf-8"),
-        file_name="conteo_distrito_program_isp.csv",
-        mime="text/csv",
-    )
+        st.caption(f"{len(tabla)} fila(s) con muestras — si no ves todas, desplazate dentro de la tabla (scroll interno).")
+        st.caption(
+            "🟩 Verde: 100 o mas muestras · 🟥 Rojo: menos de 100 muestras (por celda). "
+            "Columna **Cumple**: ✅ si todos los indicadores llegan a 100+ muestras, "
+            "❌ si falta alguno (Liberty · sms-mo se excluye de esta evaluacion)."
+        )
+        st.dataframe(estilizar_tabla_conteo(tabla), use_container_width=True, hide_index=True, height=450)
+        st.download_button(
+            "⬇️ Descargar tabla (CSV)",
+            data=tabla.to_csv(index=False).encode("utf-8"),
+            file_name="conteo_distrito_program_isp.csv",
+            mime="text/csv",
+        )
