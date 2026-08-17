@@ -11,10 +11,12 @@ dashboard principal, pero ubica cada resultado dentro de su poligono
 Salidas principales:
     1) Mapa choropleth de distritos coloreados por cantidad de pruebas
        (con opcion de ver las muestras individuales encima).
-    2) Tabla de conteo de pruebas por Distrito x Program x ISP.
-    3) Tabla de agregados consolidada (TODOS los distritos juntos) del
-       ano en curso completo, usando /api/results format=aggregate (ver
-       pestana "Agregado (Ano)").
+    2) Tabla de conteo de pruebas por Distrito x Program x ISP (pestana
+       "Mapa y Tabla por Distrito").
+    3) Consolidado por Distrito x Tecnologia (formato "Operador | Tecnologia
+       | Program", igual al reporte de Excel de referencia del cliente) para
+       un rango de fechas amplio (todo el ano en curso por defecto) -- ver
+       pestana "Agregado (Ano)".
 Requisitos adicionales sobre el dashboard original (agregar a requirements.txt):
     shapely>=2.0
     pyproj
@@ -28,10 +30,13 @@ Notas de rendimiento (ver seccion "OPTIMIZACION"):
     - El mapa se dibuja como UNA sola capa GeoJson (494 features en un solo layer)
       en vez de 494 capas individuales, y se renderiza con components.html en vez
       de streamlit-folium (evita el puente bidireccional que agrega latencia).
-    - La tabla de agregados (pestana "Agregado (Ano)") usa format=aggregate: el
-      servidor ya agrega, NO pagina, asi que puede cubrir un ano entero en una
-      sola llamada rapida -- muy distinto de "raw", donde traer un ano completo
-      muestra por muestra tomaria minutos/horas.
+    - La pestana "Agregado (Ano)" usa el MISMO mecanismo raw + spatial join que
+      el mapa (no /api/results format=aggregate): las sondas de este proyecto
+      hacen recorridos de movilidad (no tienen una ubicacion fija), asi que cada
+      MUESTRA debe ubicarse individualmente por sus propias coordenadas -- no se
+      puede ubicar "la sonda" una sola vez y asumir que todas sus muestras caen
+      en el mismo distrito. Por eso puede tardar mas que un aggregate (raw
+      pagina), pero es el unico camino correcto dado que las sondas se mueven.
 Orden del sidebar (de arriba a abajo):
     1) Filtro Fecha
     2) Filtro Distrito
@@ -231,244 +236,21 @@ def obtener_datos_pag(url, headers, body, debug=False, limite_filas=0):
     no vuelve a golpear la API hasta que cambies algo o pase el TTL)."""
     return _descargar_paginado(url, headers, body, debug=debug, limite_filas=limite_filas)
 # ===========================================================
-# API MEDUX - FORMATO "aggregate" (tabla de agregados consolidada / ano)
+# NOTA (historial): la pestana "Agregado (Ano)" probo primero /api/results
+# format=aggregate (agrupado por ano, sin paginar) para poder cubrir un ano
+# entero rapido. Para desglosar por Distrito, esa variante necesitaba
+# ubicar cada SONDA (probeId) una sola vez y excluia las que mostraran
+# ubicaciones "inconsistentes" entre muestras. Eso es INCORRECTO para este
+# proyecto: las sondas hacen recorridos de movilidad (no estan fijas en un
+# sitio), asi que la dispersion de ubicacion es esperada y cada MUESTRA
+# individual debe ubicarse en su propio distrito segun sus propias
+# coordenadas -- no se puede asumir un distrito unico por sonda. Por eso la
+# pestana "Agregado (Ano)" volvio a usar 'raw' + spatial join POR MUESTRA
+# (igual que el mapa/tabla de la otra pestana), solo que con su propio
+# rango de fechas (todo el ano en curso por defecto) en vez del rango corto
+# del mapa. Es mas lento que 'aggregate' (raw pagina), pero es el unico
+# camino correcto para sondas moviles.
 # ===========================================================
-# format:"aggregate" NO pagina -- el servidor ya agrega y responde con un
-# payload chico, practicamente instantaneo, sin importar si el rango de
-# fechas es de un dia o de un ano entero (a diferencia de "raw", donde mas
-# datos = mas paginas = mas tiempo). Se usa SOLO para la pestana "Agregado
-# (Ano)" -- el mapa y la tabla por distrito siguen con "raw" + spatial join
-# (necesitan coordenadas de cada muestra para ubicarla en su distrito).
-@st.cache_data(ttl=1800)
-def obtener_agregado(url, headers, body):
-    r = requests.post(url, headers=headers, json=body, timeout=60)
-    r.raise_for_status()
-    return r.json()
-def _es_hoja_aggregate(nodo):
-    """Una 'hoja' de la respuesta aggregate es un dict que ya trae el
-    conteo final ('samples'). No importa cuantos niveles de breakdown se
-    pidieron ni si la API los anida como dict-dentro-de-dict (un nivel por
-    campo, confirmado con un ejemplo real: results[anio][isp][test]
-    [technology][target] = hoja) o como una sola clave compuesta "a|b" --
-    en AMBOS casos la hoja ya trae cada campo de breakdown como su propia
-    propiedad (isp, test, technology, target, dateStart, ...), asi que no
-    hace falta reconstruir la ruta recorrida: alcanza con leer los campos
-    propios de la hoja."""
-    return isinstance(nodo, dict) and "samples" in nodo
-def aplanar_respuesta_aggregate(data):
-    """Recorre 'results' recursivamente (sin asumir cuantos niveles de
-    breakdown hay) y devuelve una lista de dicts, uno por hoja encontrada
-    (cada hoja ya trae sus propios campos: isp/test/technology/target/
-    samples/dateStart/timestamp)."""
-    filas = []
-    def _recorrer(nodo):
-        if _es_hoja_aggregate(nodo):
-            filas.append(nodo)
-            return
-        if isinstance(nodo, dict):
-            for v in nodo.values():
-                _recorrer(v)
-    _recorrer((data or {}).get("results", {}) or {})
-    return filas
-def tabla_agregado_anual(api_url, headers, ts_start, ts_end, programas, probes):
-    """Tabla CONSOLIDADA (todos los distritos/sondas juntos, sin desglose
-    geografico -- el endpoint aggregate no conoce distritos) de muestras por
-    Operador x Program x Tecnologia, mas el detalle por Target aparte. Usa
-    UNA sola llamada a /api/results format=aggregate agrupada por ano, asi
-    que puede cubrir el ano en curso completo (o cualquier rango amplio) sin
-    volverse lenta como pasaria con 'raw'.
-    Devuelve (tabla_resumen, tabla_detalle_target, total_api):
-      - tabla_resumen: pivote Tecnologia x (Operador · Program), con Total
-        por fila y una fila final "TOTAL" con la suma de cada columna.
-      - tabla_detalle_target: una fila por Operador+Program+Tecnologia+
-        Target con su cantidad de muestras (mas granular, para CSV).
-      - total_api: el "total" que reporta la API en la respuesta (para
-        contraste/diagnostico).
-    """
-    probes_str = [str(p) for p in probes if pd.notna(p)]
-    body = {
-        "tsStart": ts_start,
-        "tsEnd": ts_end,
-        "format": "aggregate",
-        "programs": programas,
-        "probes": probes_str,
-        "aggregate": {
-            "groupBy": {"field": "dateStart", "operation": "year"},
-            "breakdownBy": ["isp", "test", "technology", "target"],
-            "values": [{"field": "success", "operation": "count"}],
-        },
-    }
-    data = obtener_agregado(api_url, headers, body)
-    total_api = int(data.get("total", 0) or 0)
-    filas = aplanar_respuesta_aggregate(data)
-    if not filas:
-        return pd.DataFrame(), pd.DataFrame(), total_api
-    df = pd.DataFrame(filas)
-    for col in ["isp", "test", "technology", "target", "samples"]:
-        if col not in df.columns:
-            df[col] = None
-    df["samples"] = pd.to_numeric(df["samples"], errors="coerce").fillna(0).astype(int)
-    df["isp"] = df["isp"].replace(ISP_NAME_MAP)
-    df["technology"] = df["technology"].astype(str)
-    df["target"] = df["target"].astype(str)
-    # --- Detalle por target (granular, para CSV) ---
-    detalle = (
-        df.groupby(["isp", "test", "technology", "target"], dropna=False)["samples"]
-        .sum()
-        .reset_index()
-        .sort_values(["isp", "test", "technology", "samples"], ascending=[True, True, True, False])
-        .rename(columns={
-            "isp": "Operador", "test": "Program", "technology": "Tecnologia",
-            "target": "Target", "samples": "Muestras",
-        })
-    )
-    # --- Resumen: Tecnologia x (Operador · Program), con Total y fila TOTAL ---
-    pivot = df.pivot_table(
-        index="technology", columns=["isp", "test"], values="samples",
-        aggfunc="sum", fill_value=0,
-    )
-    pivot = pivot.sort_index(axis=1, level=["isp", "test"])
-    pivot.columns = [f"{isp} · {test}" for isp, test in pivot.columns]
-    pivot = pivot.rename_axis(index={"technology": "Tecnologia"})
-    pivot["Total"] = pivot.sum(axis=1)
-    pivot = pivot.reset_index().sort_values("Tecnologia")
-    fila_total = pivot.drop(columns="Tecnologia").sum(numeric_only=True)
-    fila_total["Tecnologia"] = "TOTAL"
-    resumen = pd.concat([pivot, pd.DataFrame([fila_total])], ignore_index=True)
-    return resumen, detalle, total_api
-def resolver_ubicacion_sondas(api_url, headers, probes, ts_start, ts_end, distritos,
-                               programas_muestra=None, tolerancia_grados=0.01, timeout=60):
-    """Ubica cada sonda (probeId) en su distrito UNA sola vez -- pidiendo una
-    unica pagina 'raw' (sin paginar) que alcance para ver cada sonda al menos
-    una vez, y usando su lat/lon promedio -- para poder cruzar el desglose
-    'probeId' de la tabla de agregados con un Distrito/Canton/Provincia.
-    Autovalidacion: se mide la dispersion (max distancia entre muestras)
-    lat/lon POR sonda; si supera 'tolerancia_grados' (~1.1km por defecto) se
-    marca esa sonda como 'ubicacion no confiable' y se excluye del desglose
-    por distrito en vez de arriesgar un resultado incorrecto (p.ej. sondas
-    reinstaladas a mitad del ano, que reportarian 2 ubicaciones distintas).
-    Devuelve (ubicacion_por_sonda: dict[str] -> {distrito, canton,
-    provincia, codigo_dta}, sondas_inconsistentes: list[str]).
-    """
-    if programas_muestra is None:
-        # Se evita "network" a proposito: en otros perfiles MedUX de este
-        # mismo cliente (RACSA) result0 no ser un program valido y hacia que
-        # la API devolviera total:0 para TODA la consulta combinada -- no
-        # hace falta para ubicar sondas (cualquier program con lat/lon sirve).
-        programas_muestra = [
-            "ping-test", "http-down-burst-test", "http-upload-burst-test",
-            "voice-out", "voice-polqa", "sms-mo",
-        ]
-    body = {
-        "tsStart": ts_start,
-        "tsEnd": ts_end,
-        "format": "raw",
-        "timezone": "America/Costa_Rica",
-        "programs": programas_muestra,
-        "probes": [str(p) for p in probes if pd.notna(p)],
-        "size": 10000,
-    }
-    try:
-        r = requests.post(api_url, headers=headers, json=body, timeout=timeout)
-        r.raise_for_status()
-        data = r.json()
-    except Exception:
-        return {}, []
-    df = flatten_results(data)
-    if df.empty or "probeId" not in df.columns or "latitude" not in df.columns:
-        return {}, []
-    df = df.dropna(subset=["latitude", "longitude"]).copy()
-    df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
-    df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
-    df = df.dropna(subset=["latitude", "longitude"])
-    df = df[~((df["latitude"] == 0) & (df["longitude"] == 0))]
-    if df.empty:
-        return {}, []
-    resumen_sondas = df.groupby("probeId").agg(
-        lat_prom=("latitude", "mean"), lat_min=("latitude", "min"), lat_max=("latitude", "max"),
-        lon_prom=("longitude", "mean"), lon_min=("longitude", "min"), lon_max=("longitude", "max"),
-    ).reset_index()
-    resumen_sondas["dispersion"] = (resumen_sondas["lat_max"] - resumen_sondas["lat_min"]).abs() + \
-        (resumen_sondas["lon_max"] - resumen_sondas["lon_min"]).abs()
-    sondas_inconsistentes = resumen_sondas.loc[
-        resumen_sondas["dispersion"] > tolerancia_grados, "probeId"
-    ].tolist()
-    confiables = resumen_sondas[~resumen_sondas["probeId"].isin(sondas_inconsistentes)].copy()
-    if confiables.empty:
-        return {}, sondas_inconsistentes
-    confiables = asignar_distritos(confiables, distritos, col_lat="lat_prom", col_lon="lon_prom")
-    ubicacion_por_sonda = {}
-    for _, row in confiables.iterrows():
-        ubicacion_por_sonda[str(row["probeId"])] = {
-            "distrito": row["distrito"],
-            "canton": row["canton"],
-            "provincia": row["provincia"],
-            "codigo_dta": row["codigo_dta"],
-        }
-    return ubicacion_por_sonda, sondas_inconsistentes
-def tabla_agregado_anual_por_distrito(api_url, headers, ts_start, ts_end, programas, probes,
-                                       ubicacion_por_sonda):
-    """Igual que tabla_agregado_anual, pero desglosada por Distrito en vez
-    de por Target: pide breakdownBy=["isp","test","technology","probeId"]
-    (se cambia 'target' por 'probeId' para no combinar 2 dimensiones de alta
-    cardinalidad en la misma llamada -- el mismo numero de dimensiones ya
-    confirmado que funciona, solo con otro campo) y despues mapea cada
-    probeId a su distrito via 'ubicacion_por_sonda' (resolver_ubicacion_sondas).
-    Sondas sin ubicacion resuelta (no vistas en la muestra de resolucion, o
-    con ubicacion inconsistente) se excluyen de esta tabla -- SIGUEN
-    contando en el resumen general (tabla_agregado_anual), que no depende
-    de esto.
-    Devuelve (tabla_distrito, n_leaves_sin_distrito)."""
-    if not ubicacion_por_sonda:
-        return pd.DataFrame(), 0
-    probes_str = [str(p) for p in probes if pd.notna(p)]
-    body = {
-        "tsStart": ts_start,
-        "tsEnd": ts_end,
-        "format": "aggregate",
-        "programs": programas,
-        "probes": probes_str,
-        "aggregate": {
-            "groupBy": {"field": "dateStart", "operation": "year"},
-            "breakdownBy": ["isp", "test", "technology", "probeId"],
-            "values": [{"field": "success", "operation": "count"}],
-        },
-    }
-    data = obtener_agregado(api_url, headers, body)
-    filas = aplanar_respuesta_aggregate(data)
-    if not filas:
-        return pd.DataFrame(), 0
-    df = pd.DataFrame(filas)
-    for col in ["isp", "test", "technology", "probeId", "samples"]:
-        if col not in df.columns:
-            df[col] = None
-    df["samples"] = pd.to_numeric(df["samples"], errors="coerce").fillna(0).astype(int)
-    df["isp"] = df["isp"].replace(ISP_NAME_MAP)
-    df["probeId"] = df["probeId"].astype(str)
-    df["distrito"] = df["probeId"].map(lambda p: ubicacion_por_sonda.get(p, {}).get("distrito"))
-    df["canton"] = df["probeId"].map(lambda p: ubicacion_por_sonda.get(p, {}).get("canton"))
-    df["provincia"] = df["probeId"].map(lambda p: ubicacion_por_sonda.get(p, {}).get("provincia"))
-    df["codigo_dta"] = df["probeId"].map(lambda p: ubicacion_por_sonda.get(p, {}).get("codigo_dta"))
-    n_sin_distrito = int(df["distrito"].isna().sum())
-    df_valido = df.dropna(subset=["distrito"]).copy()
-    if df_valido.empty:
-        return pd.DataFrame(), n_sin_distrito
-    df_valido["codigo_dta"] = df_valido["codigo_dta"].astype("Int64")
-    index_cols = ["codigo_dta", "distrito", "canton", "provincia"]
-    conteo = (
-        df_valido.groupby(index_cols + ["isp", "test"])["samples"]
-        .sum()
-        .reset_index(name="Muestras")
-    )
-    pivot = conteo.pivot_table(
-        index=index_cols, columns=["isp", "test"], values="Muestras",
-        aggfunc="sum", fill_value=0,
-    )
-    pivot = pivot.sort_index(axis=1, level=["isp", "test"])
-    pivot.columns = [f"{isp} · {test}" for isp, test in pivot.columns]
-    pivot["Total"] = pivot.sum(axis=1)
-    pivot = pivot.reset_index().sort_values("Total", ascending=False)
-    return pivot, n_sin_distrito
 # 1 grado ~ 111,320 m cerca del ecuador (Costa Rica ~9-11N, el error de esta
 # aproximacion es minimo). "tolerancia_m" se pasa como parametro para que el
 # cache se invalide solo cuando cambia el nivel de detalle, no en cada rerun.
@@ -673,6 +455,45 @@ def tabla_conteo_distrito(df, col_tech=None):
     else:
         cumple_bool = pd.Series(True, index=pivot.index)
     pivot["Cumple"] = cumple_bool.map({True: "✅ Cumple", False: "❌ No cumple"})
+    return pivot
+def tabla_distrito_tecnologia(df, col_tech):
+    """Conteo de pruebas por Distrito, con la Tecnologia YA INCLUIDA en el
+    nombre de cada columna (formato 'Operador | Tecnologia | Program',
+    igual a la convencion que ya usa el cliente en sus reportes de Excel)
+    en vez de como una fila extra del indice (a diferencia de
+    tabla_conteo_distrito, pensada para la pestana de mapa/rango corto).
+    Una fila por Codigo DTA/Distrito -- pensada para el consolidado ANUAL,
+    donde mezclar todas las tecnologias de un distrito en una sola fila
+    (con columnas separadas por tecnologia) es mas facil de leer/exportar
+    que una fila por distrito+tecnologia.
+    Requiere que 'test' ya venga con el desglose de ping-test por target
+    aplicado (ver preparar_test_con_target) -- el resultado queda como
+    'ping-test (IP)', consistente con el resto de la app."""
+    cols_needed = ["distrito", "test", "isp"]
+    if df.empty or not all(c in df.columns for c in cols_needed) or not col_tech or col_tech not in df.columns:
+        return pd.DataFrame()
+    df_valid = df.dropna(subset=["distrito"]).copy()
+    if df_valid.empty:
+        return pd.DataFrame()
+    df_valid["isp"] = df_valid["isp"].replace(ISP_NAME_MAP)
+    df_valid[col_tech] = df_valid[col_tech].fillna("N/D").astype(str)
+    if "codigo_dta" in df_valid.columns:
+        df_valid["codigo_dta"] = df_valid["codigo_dta"].astype("Int64")
+    index_cols = ["codigo_dta", "distrito", "canton", "provincia"] if "codigo_dta" in df_valid.columns \
+        else ["distrito", "canton", "provincia"]
+    conteo = (
+        df_valid.groupby(index_cols + ["isp", col_tech, "test"])
+        .size()
+        .reset_index(name="Muestras")
+    )
+    pivot = conteo.pivot_table(
+        index=index_cols, columns=["isp", col_tech, "test"], values="Muestras",
+        fill_value=0, aggfunc="sum",
+    )
+    pivot = pivot.sort_index(axis=1, level=["isp", col_tech, "test"])
+    pivot.columns = [f"{isp} | {tech} | {test}" for isp, tech, test in pivot.columns]
+    pivot["Total"] = pivot.sum(axis=1)
+    pivot = pivot.reset_index().sort_values("Total", ascending=False)
     return pivot
 def construir_mapa(distritos, conteo_por_distrito, df_puntos=None, mostrar_puntos=False,
                     bounds=None, distritos_resaltados=None, paleta=None,
@@ -1233,17 +1054,26 @@ with tab_distrito:
 
 with tab_agregado:
     # ===========================================================
-    # TABLA DE AGREGADOS CONSOLIDADA (todos los distritos juntos, ano en
-    # curso completo) -- usa /api/results format=aggregate, que NO pagina,
-    # asi que puede cubrir un ano entero en UNA sola llamada rapida. No
-    # depende del boton/consulta "raw" de arriba (independiente).
+    # DESGLOSE POR DISTRITO x TECNOLOGIA -- CONSOLIDADO ANUAL
     # ===========================================================
-    st.markdown("#### 📊 Consolidado anual (todos los distritos) — Operador x Program x Tecnologia")
+    # Usa 'raw' + spatial join POR MUESTRA (igual que la otra pestana), NO
+    # 'aggregate': las sondas de este proyecto hacen recorridos de movilidad
+    # (no son fijas), asi que cada muestra individual puede caer en un
+    # distrito distinto -- no se puede ubicar "la sonda" una sola vez y
+    # asumir que todas sus muestras comparten distrito. 'aggregate' tampoco
+    # tiene un campo de distrito/geografia que pedir como breakdown, asi que
+    # no hay atajo posible: para un desglose geografico confiable hace falta
+    # traer cada muestra (con su lat/lon propia) y ubicarla individualmente,
+    # tal como ya hace 'asignar_distritos' para el mapa. La diferencia con
+    # la otra pestana es solo el RANGO de fechas (aqui, todo el ano en curso
+    # por defecto, en vez de horas/dias) -- por eso puede tardar mas y usa
+    # su propio limite de filas / diagnostico de paginacion.
+    st.markdown("#### 📊 Consolidado por Distrito x Tecnología (año)")
     st.caption(
-        "Usa /api/results con format=aggregate (agrupado por ano): el servidor ya "
-        "agrega, asi que puede cubrir el ano completo en una sola consulta rapida, "
-        "sin importar el volumen de muestras (a diferencia de 'raw', que traeria "
-        "cada muestra individual y tardaria mucho para un rango asi de amplio)."
+        "Mismo mecanismo que el mapa (raw + spatial join, cada muestra ubicada "
+        "individualmente por sus propias coordenadas) pero con su propio rango "
+        "de fechas -- por defecto todo el año en curso. Formato de columnas: "
+        "'Operador | Tecnología | Program', igual al reporte de Excel de referencia."
     )
 
     if "agregado_anio_fecha_inicio" not in st.session_state:
@@ -1278,117 +1108,99 @@ with tab_agregado:
         st.caption(
             f"Rango activo: {dt_agregado_inicio_local.strftime('%Y-%m-%d %H:%M')} → "
             f"{dt_agregado_fin_local.strftime('%Y-%m-%d %H:%M')} "
-            f"(por defecto: 1 de enero del ano en curso hasta ahora)."
+            f"(por defecto: 1 de enero del año en curso hasta ahora)."
         )
 
-        if "agregado_anio_resumen" not in st.session_state:
-            st.session_state.agregado_anio_resumen = pd.DataFrame()
-        if "agregado_anio_detalle" not in st.session_state:
-            st.session_state.agregado_anio_detalle = pd.DataFrame()
-        if "agregado_anio_total_api" not in st.session_state:
-            st.session_state.agregado_anio_total_api = 0
-        if "agregado_anio_last_fetch_ts" not in st.session_state:
-            st.session_state.agregado_anio_last_fetch_ts = 0.0
+        limite_filas_anual = st.number_input(
+            "Máximo de filas a traer para este rango (0 = sin límite)",
+            min_value=0, max_value=5_000_000, value=300_000, step=50_000,
+            help="Un año completo puede tener cientos de miles/millones de "
+                 "muestras -- esto puede tardar varios minutos (la API limita "
+                 "a ~1 página/seg). Este límite corta la descarga al alcanzarlo, "
+                 "mostrando un aviso; angosta el rango o sube el límite si hace falta.",
+            key="agregado_anio_limite_filas",
+        )
+        debug_anual = st.checkbox(
+            "🔧 Mostrar diagnóstico de paginación", value=True, key="agregado_anio_debug",
+        )
+
         if "agregado_anio_tabla_distrito" not in st.session_state:
             st.session_state.agregado_anio_tabla_distrito = pd.DataFrame()
-        if "agregado_anio_sondas_inconsistentes" not in st.session_state:
-            st.session_state.agregado_anio_sondas_inconsistentes = []
-        if "agregado_anio_n_sin_distrito" not in st.session_state:
-            st.session_state.agregado_anio_n_sin_distrito = 0
+        if "agregado_anio_n_filas" not in st.session_state:
+            st.session_state.agregado_anio_n_filas = 0
+        if "agregado_anio_sin_distrito" not in st.session_state:
+            st.session_state.agregado_anio_sin_distrito = 0
+        if "agregado_anio_last_fetch_ts" not in st.session_state:
+            st.session_state.agregado_anio_last_fetch_ts = 0.0
 
-        if st.button("📊 Consultar Agregado"):
-            with st.spinner("Consultando agregados (rapido, sin paginar)..."):
-                resumen, detalle, total_api = tabla_agregado_anual(
-                    API_URL, headers, ts_agregado_start, ts_agregado_end, programas, probes,
-                )
-            with st.spinner("Resolviendo ubicacion de sondas para el desglose por distrito..."):
-                ubicacion_sondas, sondas_inconsistentes = resolver_ubicacion_sondas(
-                    API_URL, headers, probes, ts_agregado_start, ts_agregado_end, distritos,
-                    programas_muestra=programas or None,
-                )
-            if ubicacion_sondas:
-                with st.spinner("Consultando agregado desglosado por distrito..."):
-                    tabla_distrito, n_sin_distrito = tabla_agregado_anual_por_distrito(
-                        API_URL, headers, ts_agregado_start, ts_agregado_end, programas, probes,
-                        ubicacion_sondas,
-                    )
+        if st.button("📊 Consultar Distrito x Tecnología (Año)"):
+            body_anual = {
+                "tsStart": ts_agregado_start,
+                "tsEnd": ts_agregado_end,
+                "format": "raw",
+                "timezone": "America/Costa_Rica",
+                "programs": programas,
+                "probes": [str(p) for p in probes if pd.notna(p)],
+            }
+            if solo_validas:
+                body_anual["conditions"] = [
+                    {"parameters": [{"field": "success"}], "operator": "eq", "value": 1},
+                    {"parameters": [{"field": "exitCode"}], "operator": "eq", "value": 0},
+                ]
+            raw_anual = obtener_datos_pag(
+                API_URL, headers, body_anual, debug=debug_anual, limite_filas=limite_filas_anual,
+            )
+            if not raw_anual:
+                st.warning("No se recibieron datos de la API para este rango.")
             else:
-                tabla_distrito, n_sin_distrito = pd.DataFrame(), 0
-            st.session_state.agregado_anio_resumen = resumen
-            st.session_state.agregado_anio_detalle = detalle
-            st.session_state.agregado_anio_total_api = total_api
-            st.session_state.agregado_anio_tabla_distrito = tabla_distrito
-            st.session_state.agregado_anio_sondas_inconsistentes = sondas_inconsistentes
-            st.session_state.agregado_anio_n_sin_distrito = n_sin_distrito
-            st.session_state.agregado_anio_last_fetch_ts = time.time()
+                df_anual = flatten_results(raw_anual)
+                if df_anual.empty:
+                    st.warning("No se recibieron datos.")
+                else:
+                    df_anual = asignar_distritos(df_anual, distritos)
+                    n_sin_distrito_anual = int(df_anual["distrito"].isna().sum())
+                    df_anual, _ = preparar_test_con_target(df_anual)
+                    col_tech_anual = next(
+                        (c for c in ["technology", "subtechnology", "tech", "accessTechnology"]
+                         if c in df_anual.columns), None,
+                    )
+                    tabla_anual = tabla_distrito_tecnologia(df_anual, col_tech=col_tech_anual)
+                    st.session_state.agregado_anio_tabla_distrito = tabla_anual
+                    st.session_state.agregado_anio_n_filas = len(df_anual)
+                    st.session_state.agregado_anio_sin_distrito = n_sin_distrito_anual
+                    st.session_state.agregado_anio_last_fetch_ts = time.time()
 
-        resumen = st.session_state.agregado_anio_resumen
-        detalle = st.session_state.agregado_anio_detalle
-        tabla_distrito = st.session_state.agregado_anio_tabla_distrito
+        tabla_anual = st.session_state.agregado_anio_tabla_distrito
         if st.session_state.agregado_anio_last_fetch_ts:
             ultima_agregado = datetime.fromtimestamp(st.session_state.agregado_anio_last_fetch_ts, tz=zona_local)
             st.caption(
-                f"Ultima consulta: {ultima_agregado.strftime('%Y-%m-%d %H:%M:%S')} — "
-                f"{st.session_state.agregado_anio_total_api:,} muestras totales reportadas por la API."
+                f"Última consulta: {ultima_agregado.strftime('%Y-%m-%d %H:%M:%S')} — "
+                f"{st.session_state.agregado_anio_n_filas:,} muestras traídas."
             )
+            if st.session_state.agregado_anio_sin_distrito:
+                st.caption(
+                    f"⚠️ {st.session_state.agregado_anio_sin_distrito:,} muestra(s) sin "
+                    f"coordenadas válidas o fuera de los polígonos cargados (no cuentan "
+                    f"en la tabla)."
+                )
 
-        if resumen.empty:
-            st.info("👈 Ejecuta '📊 Consultar Agregado' para ver el consolidado del rango seleccionado.")
-        else:
-            st.markdown("##### Resumen general (todos los distritos juntos)")
-            st.caption(
-                "Consolidado de TODOS los distritos/sondas juntos. Fila **TOTAL** al "
-                "final = suma de todas las tecnologias."
+        if tabla_anual.empty:
+            st.info(
+                "👈 Ejecuta '📊 Consultar Distrito x Tecnología (Año)' para ver el "
+                "consolidado del rango seleccionado. Puede tardar varios minutos si "
+                "el año tiene muchas muestras."
             )
-            st.dataframe(resumen, use_container_width=True, hide_index=True, height=250)
+        else:
+            st.caption(
+                f"{len(tabla_anual)} distrito(s) con muestras en el rango — cada "
+                "muestra se ubica individualmente por sus propias coordenadas "
+                "(sondas móviles: una misma sonda puede aportar muestras a varios "
+                "distritos)."
+            )
+            st.dataframe(tabla_anual, use_container_width=True, hide_index=True, height=500)
             st.download_button(
-                "⬇️ Descargar resumen (CSV)",
-                data=resumen.to_csv(index=False).encode("utf-8"),
-                file_name="agregado_anual_resumen.csv",
+                "⬇️ Descargar consolidado por Distrito x Tecnología (CSV)",
+                data=tabla_anual.to_csv(index=False).encode("utf-8"),
+                file_name="consolidado_distrito_tecnologia_anual.csv",
                 mime="text/csv",
             )
-
-            st.markdown("##### Desglose por Distrito")
-            sondas_inconsistentes = st.session_state.agregado_anio_sondas_inconsistentes
-            if sondas_inconsistentes:
-                st.warning(
-                    f"⚠️ {len(sondas_inconsistentes)} sonda(s) con ubicacion inconsistente "
-                    f"entre muestras (posible reinstalacion) se excluyeron del desglose por "
-                    f"distrito: {', '.join(sondas_inconsistentes)}"
-                )
-            if st.session_state.agregado_anio_n_sin_distrito:
-                st.caption(
-                    f"ℹ️ {st.session_state.agregado_anio_n_sin_distrito} combinacion(es) "
-                    f"isp/program/tecnologia/sonda no se pudieron ubicar en un distrito "
-                    f"(sonda no vista en la muestra de resolucion o sin distrito valido) "
-                    f"y se excluyeron de esta tabla -- SI cuentan en el resumen general de arriba."
-                )
-            if tabla_distrito.empty:
-                st.info(
-                    "No se pudo armar el desglose por distrito (revisa que las sondas "
-                    "reporten latitude/longitude en el rango seleccionado)."
-                )
-            else:
-                st.caption(
-                    f"{len(tabla_distrito)} distrito(s) con muestras en el rango — "
-                    "mismo consolidado del ano, ahora por Distrito x Operador · Program."
-                )
-                st.dataframe(tabla_distrito, use_container_width=True, hide_index=True, height=400)
-                st.download_button(
-                    "⬇️ Descargar desglose por distrito (CSV)",
-                    data=tabla_distrito.to_csv(index=False).encode("utf-8"),
-                    file_name="agregado_anual_por_distrito.csv",
-                    mime="text/csv",
-                )
-
-            with st.expander("Ver detalle por Target (numero/IP/URL destino)"):
-                if detalle.empty:
-                    st.caption("Sin detalle disponible.")
-                else:
-                    st.dataframe(detalle, use_container_width=True, hide_index=True, height=350)
-                    st.download_button(
-                        "⬇️ Descargar detalle por target (CSV)",
-                        data=detalle.to_csv(index=False).encode("utf-8"),
-                        file_name="agregado_anual_detalle_target.csv",
-                        mime="text/csv",
-                    )
