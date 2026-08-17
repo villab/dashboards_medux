@@ -336,6 +336,139 @@ def tabla_agregado_anual(api_url, headers, ts_start, ts_end, programas, probes):
     fila_total["Tecnologia"] = "TOTAL"
     resumen = pd.concat([pivot, pd.DataFrame([fila_total])], ignore_index=True)
     return resumen, detalle, total_api
+def resolver_ubicacion_sondas(api_url, headers, probes, ts_start, ts_end, distritos,
+                               programas_muestra=None, tolerancia_grados=0.01, timeout=60):
+    """Ubica cada sonda (probeId) en su distrito UNA sola vez -- pidiendo una
+    unica pagina 'raw' (sin paginar) que alcance para ver cada sonda al menos
+    una vez, y usando su lat/lon promedio -- para poder cruzar el desglose
+    'probeId' de la tabla de agregados con un Distrito/Canton/Provincia.
+    Autovalidacion: se mide la dispersion (max distancia entre muestras)
+    lat/lon POR sonda; si supera 'tolerancia_grados' (~1.1km por defecto) se
+    marca esa sonda como 'ubicacion no confiable' y se excluye del desglose
+    por distrito en vez de arriesgar un resultado incorrecto (p.ej. sondas
+    reinstaladas a mitad del ano, que reportarian 2 ubicaciones distintas).
+    Devuelve (ubicacion_por_sonda: dict[str] -> {distrito, canton,
+    provincia, codigo_dta}, sondas_inconsistentes: list[str]).
+    """
+    if programas_muestra is None:
+        # Se evita "network" a proposito: en otros perfiles MedUX de este
+        # mismo cliente (RACSA) result0 no ser un program valido y hacia que
+        # la API devolviera total:0 para TODA la consulta combinada -- no
+        # hace falta para ubicar sondas (cualquier program con lat/lon sirve).
+        programas_muestra = [
+            "ping-test", "http-down-burst-test", "http-upload-burst-test",
+            "voice-out", "voice-polqa", "sms-mo",
+        ]
+    body = {
+        "tsStart": ts_start,
+        "tsEnd": ts_end,
+        "format": "raw",
+        "timezone": "America/Costa_Rica",
+        "programs": programas_muestra,
+        "probes": [str(p) for p in probes if pd.notna(p)],
+        "size": 10000,
+    }
+    try:
+        r = requests.post(api_url, headers=headers, json=body, timeout=timeout)
+        r.raise_for_status()
+        data = r.json()
+    except Exception:
+        return {}, []
+    df = flatten_results(data)
+    if df.empty or "probeId" not in df.columns or "latitude" not in df.columns:
+        return {}, []
+    df = df.dropna(subset=["latitude", "longitude"]).copy()
+    df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
+    df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
+    df = df.dropna(subset=["latitude", "longitude"])
+    df = df[~((df["latitude"] == 0) & (df["longitude"] == 0))]
+    if df.empty:
+        return {}, []
+    resumen_sondas = df.groupby("probeId").agg(
+        lat_prom=("latitude", "mean"), lat_min=("latitude", "min"), lat_max=("latitude", "max"),
+        lon_prom=("longitude", "mean"), lon_min=("longitude", "min"), lon_max=("longitude", "max"),
+    ).reset_index()
+    resumen_sondas["dispersion"] = (resumen_sondas["lat_max"] - resumen_sondas["lat_min"]).abs() + \
+        (resumen_sondas["lon_max"] - resumen_sondas["lon_min"]).abs()
+    sondas_inconsistentes = resumen_sondas.loc[
+        resumen_sondas["dispersion"] > tolerancia_grados, "probeId"
+    ].tolist()
+    confiables = resumen_sondas[~resumen_sondas["probeId"].isin(sondas_inconsistentes)].copy()
+    if confiables.empty:
+        return {}, sondas_inconsistentes
+    confiables = asignar_distritos(confiables, distritos, col_lat="lat_prom", col_lon="lon_prom")
+    ubicacion_por_sonda = {}
+    for _, row in confiables.iterrows():
+        ubicacion_por_sonda[str(row["probeId"])] = {
+            "distrito": row["distrito"],
+            "canton": row["canton"],
+            "provincia": row["provincia"],
+            "codigo_dta": row["codigo_dta"],
+        }
+    return ubicacion_por_sonda, sondas_inconsistentes
+def tabla_agregado_anual_por_distrito(api_url, headers, ts_start, ts_end, programas, probes,
+                                       ubicacion_por_sonda):
+    """Igual que tabla_agregado_anual, pero desglosada por Distrito en vez
+    de por Target: pide breakdownBy=["isp","test","technology","probeId"]
+    (se cambia 'target' por 'probeId' para no combinar 2 dimensiones de alta
+    cardinalidad en la misma llamada -- el mismo numero de dimensiones ya
+    confirmado que funciona, solo con otro campo) y despues mapea cada
+    probeId a su distrito via 'ubicacion_por_sonda' (resolver_ubicacion_sondas).
+    Sondas sin ubicacion resuelta (no vistas en la muestra de resolucion, o
+    con ubicacion inconsistente) se excluyen de esta tabla -- SIGUEN
+    contando en el resumen general (tabla_agregado_anual), que no depende
+    de esto.
+    Devuelve (tabla_distrito, n_leaves_sin_distrito)."""
+    if not ubicacion_por_sonda:
+        return pd.DataFrame(), 0
+    probes_str = [str(p) for p in probes if pd.notna(p)]
+    body = {
+        "tsStart": ts_start,
+        "tsEnd": ts_end,
+        "format": "aggregate",
+        "programs": programas,
+        "probes": probes_str,
+        "aggregate": {
+            "groupBy": {"field": "dateStart", "operation": "year"},
+            "breakdownBy": ["isp", "test", "technology", "probeId"],
+            "values": [{"field": "success", "operation": "count"}],
+        },
+    }
+    data = obtener_agregado(api_url, headers, body)
+    filas = aplanar_respuesta_aggregate(data)
+    if not filas:
+        return pd.DataFrame(), 0
+    df = pd.DataFrame(filas)
+    for col in ["isp", "test", "technology", "probeId", "samples"]:
+        if col not in df.columns:
+            df[col] = None
+    df["samples"] = pd.to_numeric(df["samples"], errors="coerce").fillna(0).astype(int)
+    df["isp"] = df["isp"].replace(ISP_NAME_MAP)
+    df["probeId"] = df["probeId"].astype(str)
+    df["distrito"] = df["probeId"].map(lambda p: ubicacion_por_sonda.get(p, {}).get("distrito"))
+    df["canton"] = df["probeId"].map(lambda p: ubicacion_por_sonda.get(p, {}).get("canton"))
+    df["provincia"] = df["probeId"].map(lambda p: ubicacion_por_sonda.get(p, {}).get("provincia"))
+    df["codigo_dta"] = df["probeId"].map(lambda p: ubicacion_por_sonda.get(p, {}).get("codigo_dta"))
+    n_sin_distrito = int(df["distrito"].isna().sum())
+    df_valido = df.dropna(subset=["distrito"]).copy()
+    if df_valido.empty:
+        return pd.DataFrame(), n_sin_distrito
+    df_valido["codigo_dta"] = df_valido["codigo_dta"].astype("Int64")
+    index_cols = ["codigo_dta", "distrito", "canton", "provincia"]
+    conteo = (
+        df_valido.groupby(index_cols + ["isp", "test"])["samples"]
+        .sum()
+        .reset_index(name="Muestras")
+    )
+    pivot = conteo.pivot_table(
+        index=index_cols, columns=["isp", "test"], values="Muestras",
+        aggfunc="sum", fill_value=0,
+    )
+    pivot = pivot.sort_index(axis=1, level=["isp", "test"])
+    pivot.columns = [f"{isp} · {test}" for isp, test in pivot.columns]
+    pivot["Total"] = pivot.sum(axis=1)
+    pivot = pivot.reset_index().sort_values("Total", ascending=False)
+    return pivot, n_sin_distrito
 # 1 grado ~ 111,320 m cerca del ecuador (Costa Rica ~9-11N, el error de esta
 # aproximacion es minimo). "tolerancia_m" se pasa como parametro para que el
 # cache se invalide solo cuando cambia el nivel de detalle, no en cada rerun.
@@ -1156,19 +1289,42 @@ with tab_agregado:
             st.session_state.agregado_anio_total_api = 0
         if "agregado_anio_last_fetch_ts" not in st.session_state:
             st.session_state.agregado_anio_last_fetch_ts = 0.0
+        if "agregado_anio_tabla_distrito" not in st.session_state:
+            st.session_state.agregado_anio_tabla_distrito = pd.DataFrame()
+        if "agregado_anio_sondas_inconsistentes" not in st.session_state:
+            st.session_state.agregado_anio_sondas_inconsistentes = []
+        if "agregado_anio_n_sin_distrito" not in st.session_state:
+            st.session_state.agregado_anio_n_sin_distrito = 0
 
         if st.button("📊 Consultar Agregado"):
             with st.spinner("Consultando agregados (rapido, sin paginar)..."):
                 resumen, detalle, total_api = tabla_agregado_anual(
                     API_URL, headers, ts_agregado_start, ts_agregado_end, programas, probes,
                 )
+            with st.spinner("Resolviendo ubicacion de sondas para el desglose por distrito..."):
+                ubicacion_sondas, sondas_inconsistentes = resolver_ubicacion_sondas(
+                    API_URL, headers, probes, ts_agregado_start, ts_agregado_end, distritos,
+                    programas_muestra=programas or None,
+                )
+            if ubicacion_sondas:
+                with st.spinner("Consultando agregado desglosado por distrito..."):
+                    tabla_distrito, n_sin_distrito = tabla_agregado_anual_por_distrito(
+                        API_URL, headers, ts_agregado_start, ts_agregado_end, programas, probes,
+                        ubicacion_sondas,
+                    )
+            else:
+                tabla_distrito, n_sin_distrito = pd.DataFrame(), 0
             st.session_state.agregado_anio_resumen = resumen
             st.session_state.agregado_anio_detalle = detalle
             st.session_state.agregado_anio_total_api = total_api
+            st.session_state.agregado_anio_tabla_distrito = tabla_distrito
+            st.session_state.agregado_anio_sondas_inconsistentes = sondas_inconsistentes
+            st.session_state.agregado_anio_n_sin_distrito = n_sin_distrito
             st.session_state.agregado_anio_last_fetch_ts = time.time()
 
         resumen = st.session_state.agregado_anio_resumen
         detalle = st.session_state.agregado_anio_detalle
+        tabla_distrito = st.session_state.agregado_anio_tabla_distrito
         if st.session_state.agregado_anio_last_fetch_ts:
             ultima_agregado = datetime.fromtimestamp(st.session_state.agregado_anio_last_fetch_ts, tz=zona_local)
             st.caption(
@@ -1179,10 +1335,10 @@ with tab_agregado:
         if resumen.empty:
             st.info("👈 Ejecuta '📊 Consultar Agregado' para ver el consolidado del rango seleccionado.")
         else:
+            st.markdown("##### Resumen general (todos los distritos juntos)")
             st.caption(
-                "Consolidado de TODOS los distritos/sondas juntos (el endpoint de "
-                "agregados no desglosa por distrito). Fila **TOTAL** al final = "
-                "suma de todas las tecnologias."
+                "Consolidado de TODOS los distritos/sondas juntos. Fila **TOTAL** al "
+                "final = suma de todas las tecnologias."
             )
             st.dataframe(resumen, use_container_width=True, hide_index=True, height=250)
             st.download_button(
@@ -1191,6 +1347,39 @@ with tab_agregado:
                 file_name="agregado_anual_resumen.csv",
                 mime="text/csv",
             )
+
+            st.markdown("##### Desglose por Distrito")
+            sondas_inconsistentes = st.session_state.agregado_anio_sondas_inconsistentes
+            if sondas_inconsistentes:
+                st.warning(
+                    f"⚠️ {len(sondas_inconsistentes)} sonda(s) con ubicacion inconsistente "
+                    f"entre muestras (posible reinstalacion) se excluyeron del desglose por "
+                    f"distrito: {', '.join(sondas_inconsistentes)}"
+                )
+            if st.session_state.agregado_anio_n_sin_distrito:
+                st.caption(
+                    f"ℹ️ {st.session_state.agregado_anio_n_sin_distrito} combinacion(es) "
+                    f"isp/program/tecnologia/sonda no se pudieron ubicar en un distrito "
+                    f"(sonda no vista en la muestra de resolucion o sin distrito valido) "
+                    f"y se excluyeron de esta tabla -- SI cuentan en el resumen general de arriba."
+                )
+            if tabla_distrito.empty:
+                st.info(
+                    "No se pudo armar el desglose por distrito (revisa que las sondas "
+                    "reporten latitude/longitude en el rango seleccionado)."
+                )
+            else:
+                st.caption(
+                    f"{len(tabla_distrito)} distrito(s) con muestras en el rango — "
+                    "mismo consolidado del ano, ahora por Distrito x Operador · Program."
+                )
+                st.dataframe(tabla_distrito, use_container_width=True, hide_index=True, height=400)
+                st.download_button(
+                    "⬇️ Descargar desglose por distrito (CSV)",
+                    data=tabla_distrito.to_csv(index=False).encode("utf-8"),
+                    file_name="agregado_anual_por_distrito.csv",
+                    mime="text/csv",
+                )
 
             with st.expander("Ver detalle por Target (numero/IP/URL destino)"):
                 if detalle.empty:
