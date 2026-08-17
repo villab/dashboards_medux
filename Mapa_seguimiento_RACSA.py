@@ -613,6 +613,39 @@ def asignar_distritos(df, distritos, col_lat="latitude", col_lon="longitude"):
     return df
 
 
+def manchas_con_muestras(df_puntos, manchas, col_lat="latitude", col_lon="longitude"):
+    """Devuelve el set de nombres de 'mancha' (poligonos del KMZ) que tienen
+    AL MENOS una muestra de df_puntos adentro -- mismo spatial join
+    vectorizado que asignar_distritos, pero contra los poligonos del KMZ en
+    vez de los distritos del IGN, y solo interesa el nombre (no hace falta
+    devolver el df completo).
+
+    Esto NO depende de resolver_ubicacion_sondas ni de la tabla de agregados
+    (que tiene sus propios problemas con el perfil de RACSA) -- usa
+    directamente los puntos crudos (lat/lon) que ya trajo la consulta del
+    mapa (raw), asi que es independiente de esa otra logica.
+    """
+    if df_puntos is None or df_puntos.empty or not manchas:
+        return set()
+    if col_lat not in df_puntos.columns or col_lon not in df_puntos.columns:
+        return set()
+
+    lat_arr = pd.to_numeric(df_puntos[col_lat], errors="coerce").to_numpy()
+    lon_arr = pd.to_numeric(df_puntos[col_lon], errors="coerce").to_numpy()
+    validos = ~pd.isna(lat_arr) & ~pd.isna(lon_arr) & ~((lat_arr == 0) & (lon_arr == 0))
+    if not validos.any():
+        return set()
+
+    geoms = [m["geometry"] for m in manchas]
+    tree = STRtree(geoms)
+    idx_validos = np.where(validos)[0]
+    puntos = shapely_points(lon_arr[idx_validos], lat_arr[idx_validos])
+    pares = tree.query(puntos, predicate="intersects")
+
+    nombres_con_muestras = {manchas[i_geom]["nombre"] for i_geom in pares[1]}
+    return nombres_con_muestras
+
+
 def _parse_coordenadas_kml(texto_coordenadas):
     """Parsea el texto de un <coordinates> de KML: grupos separados por
     espacios, cada uno 'lon,lat[,alt]' separado por comas."""
@@ -1436,8 +1469,11 @@ simplificacion_manchas_m = st.sidebar.slider(
          "del IGN; valores mas altos aligeran el mapa a costa de precision.",
 )
 mostrar_radiobases = st.sidebar.checkbox(
-    f"Mostrar radiobases — {len(radiobases_df)} nodo(s)"
+    f"Mostrar radiobases — {len(radiobases_df)} nodo(s) totales"
     + (f" ({radiobases_descartadas} descartada(s) por coordenadas invalidas)" if radiobases_descartadas else ""),
+    help="Solo se dibujan las radiobases cuya 'mancha' (poligono KMZ) tiene "
+         "al menos una muestra en la consulta/filtro actual del mapa (raw). "
+         "Hace falta correr '🗺️ Consultar Mapa (raw)' primero.",
     value=not radiobases_df.empty,
     disabled=radiobases_df.empty,
 )
@@ -1567,15 +1603,8 @@ should_fetch_tabla = st.sidebar.button("📋 Consultar Tabla (agregados)")
 
 if should_fetch_tabla:
     with st.spinner("Resolviendo ubicacion de sondas..."):
-        # OJO: se pasan los MISMOS programs elegidos en el sidebar (variable
-        # "programas", mas abajo en "Resto de filtros") en vez de dejar que
-        # resolver_ubicacion_sondas use su lista interna por defecto -- esa
-        # lista por defecto incluye "network", que en el perfil de RACSA no
-        # es un program valido y hace que la API devuelva total:0 para TODA
-        # la consulta (no solo para "network"), dejando 0 sondas ubicadas.
         ubicacion_sondas, sondas_inconsistentes = resolver_ubicacion_sondas(
             API_URL, headers, probes, ts_tabla_start, ts_tabla_end, distritos,
-            programas_muestra=programas or None,
         )
     if not ubicacion_sondas:
         st.warning(
@@ -1685,11 +1714,27 @@ else:
             .items()
         )
     }
+
+    # Radiobases: solo se dibujan las que pertenecen a una "mancha" (poligono
+    # KMZ) que tiene AL MENOS una muestra en la consulta/filtro actual del
+    # mapa (df_filtrado, el mismo que ya se uso arriba para el choropleth de
+    # distritos). Independiente de resolver_ubicacion_sondas/tabla agregada.
+    if mostrar_radiobases and manchas_kmz and not radiobases_df.empty:
+        manchas_activas = manchas_con_muestras(df_filtrado, manchas_kmz)
+        radiobases_a_dibujar = radiobases_df[radiobases_df["poligono"].isin(manchas_activas)]
+        st.caption(
+            f"📡 Radiobases: mostrando {len(radiobases_a_dibujar)} de {len(radiobases_df)} "
+            f"(solo las de manchas con muestras en esta consulta/filtro: "
+            f"{len(manchas_activas)} de {len(manchas_kmz)} manchas)."
+        )
+    else:
+        radiobases_a_dibujar = radiobases_df.iloc[0:0]
+
     mapa = construir_mapa(
         distritos, conteo_por_distrito, df_puntos=df_filtrado, mostrar_puntos=mostrar_puntos,
         bounds=bounds_seleccion, distritos_resaltados=nombres_resaltados, paleta=paleta_mapa,
         manchas=manchas_kmz, mostrar_manchas=mostrar_manchas,
-        radiobases=radiobases_df, mostrar_radiobases=mostrar_radiobases,
+        radiobases=radiobases_a_dibujar, mostrar_radiobases=mostrar_radiobases,
     )
     # components.html (en vez de st_folium) evita el puente bidireccional JS<->Python
     # que streamlit-folium reconstruye en cada rerun; aqui es solo un iframe estatico.
