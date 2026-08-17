@@ -1,4 +1,4 @@
-"""tester capas
+"""
 Medux Monitoring Dashboard - Vista por Poligonos (Distritos de Costa Rica)
 ===========================================================================
 Portal independiente que reutiliza la misma conexion a la API MedUX IDS del
@@ -1567,8 +1567,15 @@ should_fetch_tabla = st.sidebar.button("📋 Consultar Tabla (agregados)")
 
 if should_fetch_tabla:
     with st.spinner("Resolviendo ubicacion de sondas..."):
+        # OJO: se pasan los MISMOS programs elegidos en el sidebar (variable
+        # "programas", mas abajo en "Resto de filtros") en vez de dejar que
+        # resolver_ubicacion_sondas use su lista interna por defecto -- esa
+        # lista por defecto incluye "network", que en el perfil de RACSA no
+        # es un program valido y hace que la API devuelva total:0 para TODA
+        # la consulta (no solo para "network"), dejando 0 sondas ubicadas.
         ubicacion_sondas, sondas_inconsistentes = resolver_ubicacion_sondas(
             API_URL, headers, probes, ts_tabla_start, ts_tabla_end, distritos,
+            programas_muestra=programas or None,
         )
     if not ubicacion_sondas:
         st.warning(
