@@ -152,8 +152,8 @@ KML_NS = {"kml": "http://www.opengis.net/kml/2.2"}
 # ===========================================================
 # CONFIGURACION INICIAL STREAMLIT
 # ===========================================================
-st.set_page_config(page_title="Medux - RACSA", layout="wide")
-st.markdown("### COSTA RICA RACSA - RECORRIDOS 2026 - 2027")
+st.set_page_config(page_title="Medux - Vista por Poligonos", layout="wide")
+st.markdown("### COSTA RICA - RESULTADOS POR DISTRITO (Poligonos WFS / IGN)")
 
 # ===========================================================
 # TOKEN Y PROBES DESDE SECRETS
@@ -432,7 +432,7 @@ def resolver_ubicacion_sondas(api_url, headers, probes, ts_start, ts_end, distri
     if programas_muestra is None:
         programas_muestra = [
             "network", "ping-test", "http-down-burst-test", "http-upload-burst-test",
-            "youtube-api", "cloud-upload", "cloud-download","dropbox-get"
+            "voice-out", "voice-polqa", "sms-mo",
         ]
     body = {
         "tsStart": ts_start,
@@ -640,6 +640,44 @@ def manchas_con_muestras(df_puntos, manchas, col_lat="latitude", col_lon="longit
 
     nombres_con_muestras = {manchas[i_geom]["nombre"] for i_geom in pares[1]}
     return nombres_con_muestras
+
+
+def asignar_distrito_a_manchas(manchas, distritos):
+    """Ubica cada 'mancha' (poligono KMZ) dentro de un distrito, para que el
+    tooltip del mapa pueda mostrar Distrito/Canton/Provincia igual que las
+    demas capas, ademas del numero de mancha.
+
+    Usa representative_point() de cada mancha (garantizado que cae DENTRO
+    del poligono, a diferencia de centroid() que puede caer afuera en
+    poligonos concavos o MultiPolygon) y reutiliza asignar_distritos (mismo
+    spatial join vectorizado que ya se usa para las muestras).
+
+    Devuelve una copia de 'manchas' con las claves 'distrito'/'canton'/
+    'provincia' agregadas (None si la mancha no cae dentro de ningun
+    distrito cargado -- por ejemplo si esta fuera de Costa Rica o el WFS
+    no cubre esa zona).
+    """
+    if not manchas or not distritos:
+        return manchas
+
+    puntos_repr = [m["geometry"].representative_point() for m in manchas]
+    df_puntos = pd.DataFrame({
+        "nombre": [m["nombre"] for m in manchas],
+        "lat": [p.y for p in puntos_repr],
+        "lon": [p.x for p in puntos_repr],
+    })
+    df_puntos = asignar_distritos(df_puntos, distritos, col_lat="lat", col_lon="lon")
+    info_por_nombre = df_puntos.set_index("nombre")[["distrito", "canton", "provincia"]].to_dict("index")
+
+    manchas_enriquecidas = []
+    for m in manchas:
+        info = info_por_nombre.get(m["nombre"], {})
+        m2 = dict(m)
+        m2["distrito"] = info.get("distrito")
+        m2["canton"] = info.get("canton")
+        m2["provincia"] = info.get("provincia")
+        manchas_enriquecidas.append(m2)
+    return manchas_enriquecidas
 
 
 def _parse_coordenadas_kml(texto_coordenadas):
@@ -1116,7 +1154,12 @@ def construir_mapa(distritos, conteo_por_distrito, df_puntos=None, mostrar_punto
             {
                 "type": "Feature",
                 "geometry": mancha["geo"],
-                "properties": {"nombre": mancha["nombre"]},
+                "properties": {
+                    "nombre": mancha["nombre"],
+                    "distrito": mancha.get("distrito") or "N/D",
+                    "canton": mancha.get("canton") or "N/D",
+                    "provincia": mancha.get("provincia") or "N/D",
+                },
             }
             for mancha in manchas
         ]
@@ -1130,7 +1173,10 @@ def construir_mapa(distritos, conteo_por_distrito, df_puntos=None, mostrar_punto
                     "dashArray": "6, 4",
                     "fillOpacity": 0.06,
                 },
-                tooltip=folium.GeoJsonTooltip(fields=["nombre"], aliases=["Mancha"]),
+                tooltip=folium.GeoJsonTooltip(
+                    fields=["distrito", "canton", "provincia", "nombre"],
+                    aliases=["Distrito", "Canton", "Provincia", "Mancha (KMZ)"],
+                ),
                 name="Manchas de cobertura (KMZ)",
             ).add_to(m)
 
@@ -1409,6 +1455,11 @@ operador_sel = st.sidebar.multiselect(
 if "racsa_simplif_manchas_m" not in st.session_state:
     st.session_state["racsa_simplif_manchas_m"] = 30
 manchas_kmz = cargar_manchas_kmz(KMZ_MANCHAS_PATH, tolerancia_m=st.session_state["racsa_simplif_manchas_m"])
+# Se ubica cada mancha en su distrito (usa el mismo WFS/spatial join que el
+# resto de la app) SOLO para poder mostrarlo en el tooltip del mapa -- no
+# afecta el filtro de radiobases (manchas_con_muestras sigue usando
+# unicamente "geometry"/"nombre").
+manchas_kmz = asignar_distrito_a_manchas(manchas_kmz, distritos)
 radiobases_df, radiobases_descartadas = cargar_radiobases(RADIOBASES_XLSX_PATH)
 
 st.sidebar.markdown("---")
