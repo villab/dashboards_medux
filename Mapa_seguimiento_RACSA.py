@@ -117,14 +117,14 @@ WFS_SRS_OUTPUT = "EPSG:4326"   # WGS84 lat/lon (lo que trae la API MedUX)
 ISP_NAME_MAP = {
     "liberty_cr": "Liberty",
     "claro_cr": "Claro",
-    "racsa_cr": "Tigo",
+    "racsa_cr": "Racsa",
     "kolbi_cr": "Kolbi",
     "telecable_cr": "Telecable",
 }
 ISP_COLOR_MAP = {
     "Liberty": "#6F2DA8",
     "Claro": "#D52B1E",
-    "Racsa": "#0033A0",
+    "Racsa": "#05ABE8",
     "Kolbi": "#009739",
     "Telecable": "#FF6600",
 }
