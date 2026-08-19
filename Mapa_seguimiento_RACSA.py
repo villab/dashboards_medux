@@ -117,14 +117,14 @@ WFS_SRS_OUTPUT = "EPSG:4326"   # WGS84 lat/lon (lo que trae la API MedUX)
 ISP_NAME_MAP = {
     "liberty_cr": "Liberty",
     "claro_cr": "Claro",
-    "racsa_cr": "Racsa",
+    "tigo_cr": "Tigo",
     "kolbi_cr": "Kolbi",
     "telecable_cr": "Telecable",
 }
 ISP_COLOR_MAP = {
     "Liberty": "#6F2DA8",
     "Claro": "#D52B1E",
-    "Racsa": "#05ABE8",
+    "Tigo": "#0033A0",
     "Kolbi": "#009739",
     "Telecable": "#FF6600",
 }
@@ -655,7 +655,7 @@ def asignar_distrito_a_manchas(manchas, distritos):
     Devuelve una copia de 'manchas' con las claves 'distrito'/'canton'/
     'provincia' agregadas (None si la mancha no cae dentro de ningun
     distrito cargado -- por ejemplo si esta fuera de Costa Rica o el WFS
-    no cubre esa zona). 
+    no cubre esa zona).
     """
     if not manchas or not distritos:
         return manchas
@@ -667,7 +667,9 @@ def asignar_distrito_a_manchas(manchas, distritos):
         "lon": [p.x for p in puntos_repr],
     })
     df_puntos = asignar_distritos(df_puntos, distritos, col_lat="lat", col_lon="lon")
-    info_por_nombre = df_puntos.set_index("nombre")[["distrito", "canton", "provincia"]].to_dict("index")
+    info_por_nombre = df_puntos.set_index("nombre")[
+        ["distrito", "canton", "provincia", "codigo_dta"]
+    ].to_dict("index")
 
     manchas_enriquecidas = []
     for m in manchas:
@@ -676,6 +678,7 @@ def asignar_distrito_a_manchas(manchas, distritos):
         m2["distrito"] = info.get("distrito")
         m2["canton"] = info.get("canton")
         m2["provincia"] = info.get("provincia")
+        m2["codigo_dta"] = info.get("codigo_dta")
         manchas_enriquecidas.append(m2)
     return manchas_enriquecidas
 
@@ -1156,6 +1159,7 @@ def construir_mapa(distritos, conteo_por_distrito, df_puntos=None, mostrar_punto
                 "geometry": mancha["geo"],
                 "properties": {
                     "nombre": mancha["nombre"],
+                    "codigo_dta": mancha.get("codigo_dta") or "N/D",
                     "distrito": mancha.get("distrito") or "N/D",
                     "canton": mancha.get("canton") or "N/D",
                     "provincia": mancha.get("provincia") or "N/D",
@@ -1174,8 +1178,8 @@ def construir_mapa(distritos, conteo_por_distrito, df_puntos=None, mostrar_punto
                     "fillOpacity": 0.06,
                 },
                 tooltip=folium.GeoJsonTooltip(
-                    fields=["distrito", "canton", "provincia", "nombre"],
-                    aliases=["Distrito", "Canton", "Provincia", "Mancha (KMZ)"],
+                    fields=["codigo_dta", "distrito", "canton", "provincia", "nombre"],
+                    aliases=["Codigo DTA", "Distrito", "Canton", "Provincia", "Mancha (KMZ)"],
                 ),
                 name="Manchas de cobertura (KMZ)",
             ).add_to(m)
@@ -1501,12 +1505,12 @@ st.sidebar.header("Tipos de prueba (programs)")
 programas = st.sidebar.multiselect(
     "Selecciona programs",
     [
-        "cloud-download", "cloud-upload", "ping-test", "network",
-        "confess-chrome", "youtube-api", "dropbox-get","http-down-burst-test","http-upload-burst-test"
+        "http-down-burst-test", "http-upload-burst-test", "ping-test", "network",
+        "voice-out", "voice-polqa", "sms-mo",
     ],
     default=[
-        "cloud-download", "cloud-upload", "ping-test", 
-        "confess-chrome", "youtube-api", "dropbox-get","http-down-burst-test","http-upload-burst-test"
+        "ping-test", "http-down-burst-test", "http-upload-burst-test",
+        "voice-out", "voice-polqa", "sms-mo",
     ],
 )
 
