@@ -1059,6 +1059,7 @@ def construir_mapa(distritos, conteo_por_distrito, df_puntos=None, mostrar_punto
                     bounds=None, distritos_resaltados=None, paleta=None,
                     usar_escalones=False, n_escalones=6, metodo_escalon="quantiles",
                     redondear_escalones="int", manchas=None, mostrar_manchas=False,
+                    manchas_tooltip=None,
                     radiobases=None, mostrar_radiobases=False):
     # prefer_canvas=True: los puntos se dibujan en un solo <canvas> en vez de
     # un nodo SVG por marcador -- clave para poder mostrar miles de muestras
@@ -1178,23 +1179,30 @@ def construir_mapa(distritos, conteo_por_distrito, df_puntos=None, mostrar_punto
             _agregar_leyenda_isp(m, isps_presentes)
 
     # --- Capa de "manchas" de cobertura (KMZ, especifico de RACSA) ---------
-    # Poligonos propios del proyecto, NO son distritos administrativos --
-    # se dibujan en su propia capa GeoJson (igual patron de rendimiento que
-    # los distritos: una sola capa con todas las features) con un estilo
-    # bien distinto (borde azul punteado, relleno minimo) para que no se
-    # confundan con el choropleth de distritos.
+    # Poligonos propios del proyecto, NO son distritos administrativos.
+    # Se dibujan en DOS capas GeoJson separadas:
+    #   1) VISIBLE: el poligono ORIGINAL de cada mancha (sin subdividir),
+    #      un solo contorno punteado azul por mancha -- exactamente como se
+    #      veia antes. Subdividir cada mancha por distrito (ver
+    #      dividir_manchas_por_distrito) para el tooltip generaba, en zonas
+    #      con muchos distritos chicos y adyacentes (GAM/San Jose), un
+    #      enjambre de bordes punteados internos (uno por cada limite de
+    #      distrito que atraviesa la mancha) que a nivel pais se veia como
+    #      un bloque solido/sucio en vez de un contorno limpio -- por eso
+    #      esta capa SIEMPRE usa el poligono completo, nunca los pedazos.
+    #   2) INVISIBLE (agregada encima, mismo orden = mismo z-order en
+    #      folium/Leaflet): cada mancha SUBDIVIDIDA por distrito real,
+    #      dibujada sin relleno ni borde (fillOpacity=0, weight=0) pero
+    #      SIGUE SIENDO interactiva (Leaflet detecta el hover igual en modo
+    #      canvas, prefer_canvas=True) -- existe solo para que el tooltip
+    #      muestre el Distrito/Canton/Provincia/Codigo DTA exacto segun la
+    #      posicion del cursor, sin ensuciar el dibujo de la capa 1.
     if mostrar_manchas and manchas:
         mancha_features = [
             {
                 "type": "Feature",
                 "geometry": mancha["geo"],
-                "properties": {
-                    "nombre": mancha["nombre"],
-                    "codigo_dta": mancha.get("codigo_dta") or "N/D",
-                    "distrito": mancha.get("distrito") or "N/D",
-                    "canton": mancha.get("canton") or "N/D",
-                    "provincia": mancha.get("provincia") or "N/D",
-                },
+                "properties": {"nombre": mancha["nombre"]},
             }
             for mancha in manchas
         ]
@@ -1209,10 +1217,43 @@ def construir_mapa(distritos, conteo_por_distrito, df_puntos=None, mostrar_punto
                     "fillOpacity": 0.06,
                 },
                 tooltip=folium.GeoJsonTooltip(
+                    fields=["nombre"],
+                    aliases=["Mancha (KMZ)"],
+                ),
+                name="Manchas de cobertura (KMZ)",
+            ).add_to(m)
+
+        piezas_tooltip = manchas_tooltip if manchas_tooltip is not None else manchas
+        pieza_features = [
+            {
+                "type": "Feature",
+                "geometry": pieza["geo"],
+                "properties": {
+                    "nombre": pieza["nombre"],
+                    "codigo_dta": pieza.get("codigo_dta") or "N/D",
+                    "distrito": pieza.get("distrito") or "N/D",
+                    "canton": pieza.get("canton") or "N/D",
+                    "provincia": pieza.get("provincia") or "N/D",
+                },
+            }
+            for pieza in piezas_tooltip
+        ]
+        if pieza_features:
+            folium.GeoJson(
+                data={"type": "FeatureCollection", "features": pieza_features},
+                style_function=lambda feat: {
+                    "fillColor": "#1f6feb",
+                    "color": "#1f6feb",
+                    "weight": 0,
+                    "opacity": 0,
+                    "fill": True,
+                    "fillOpacity": 0.001,
+                },
+                tooltip=folium.GeoJsonTooltip(
                     fields=["codigo_dta", "distrito", "canton", "provincia", "nombre"],
                     aliases=["Codigo DTA", "Distrito", "Canton", "Provincia", "Mancha (KMZ)"],
                 ),
-                name="Manchas de cobertura (KMZ)",
+                name="Manchas (tooltip por distrito)",
             ).add_to(m)
 
     # --- Capa de radiobases (Excel, especifico de RACSA) -------------------
@@ -1749,7 +1790,8 @@ else:
     mapa = construir_mapa(
         distritos, conteo_por_distrito, df_puntos=df_filtrado, mostrar_puntos=mostrar_puntos,
         bounds=bounds_seleccion, distritos_resaltados=nombres_resaltados, paleta=paleta_mapa,
-        manchas=manchas_kmz_tooltip, mostrar_manchas=mostrar_manchas,
+        manchas=manchas_kmz, mostrar_manchas=mostrar_manchas,
+        manchas_tooltip=manchas_kmz_tooltip,
         radiobases=radiobases_a_dibujar, mostrar_radiobases=mostrar_radiobases,
     )
     # components.html (en vez de st_folium) evita el puente bidireccional JS<->Python
