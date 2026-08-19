@@ -642,45 +642,76 @@ def manchas_con_muestras(df_puntos, manchas, col_lat="latitude", col_lon="longit
     return nombres_con_muestras
 
 
-def asignar_distrito_a_manchas(manchas, distritos):
-    """Ubica cada 'mancha' (poligono KMZ) dentro de un distrito, para que el
-    tooltip del mapa pueda mostrar Distrito/Canton/Provincia igual que las
-    demas capas, ademas del numero de mancha.
+def dividir_manchas_por_distrito(manchas, distritos, tolerancia_m=30):
+    """Subdivide cada 'mancha' (poligono KMZ) en los pedazos que caen dentro
+    de cada distrito con el que se solapa, calculando la INTERSECCION
+    geometrica real -- no basta con resolver un unico distrito por mancha
+    (por ejemplo con representative_point()), porque las manchas de este
+    proyecto son zonas de cobertura amplias que suelen cruzar VARIOS
+    distritos administrativos. Con un solo distrito fijo por poligono, el
+    tooltip del mapa mostraba siempre el mismo nombre sin importar en que
+    parte del poligono estuviera el cursor (a diferencia de la capa de
+    distritos, donde cada distrito es su propio poligono/feature). Al
+    subdividir, cada pedazo (mancha, distrito) queda como su propia feature
+    en el mapa, con su propio Distrito/Canton/Provincia/Codigo DTA exactos,
+    asi que el tooltip SI cambia segun la posicion real del cursor.
 
-    Usa representative_point() de cada mancha (garantizado que cae DENTRO
-    del poligono, a diferencia de centroid() que puede caer afuera en
-    poligonos concavos o MultiPolygon) y reutiliza asignar_distritos (mismo
-    spatial join vectorizado que ya se usa para las muestras).
-
-    Devuelve una copia de 'manchas' con las claves 'distrito'/'canton'/
-    'provincia' agregadas (None si la mancha no cae dentro de ningun
-    distrito cargado -- por ejemplo si esta fuera de Costa Rica o el WFS
-    no cubre esa zona).
+    Devuelve una lista de "piezas": una por cada interseccion
+    (mancha, distrito) con area > 0, con las mismas claves que una mancha
+    normal (nombre, geometry, geo) mas distrito/canton/provincia/codigo_dta
+    ya resueltos para ESA pieza en particular. Si una mancha no se solapa
+    con ningun distrito cargado (por ejemplo si cae fuera de la cobertura
+    del WFS), se deja igual -- sin subdividir, sin distrito -- para no
+    perder el poligono del mapa.
     """
     if not manchas or not distritos:
         return manchas
 
-    puntos_repr = [m["geometry"].representative_point() for m in manchas]
-    df_puntos = pd.DataFrame({
-        "nombre": [m["nombre"] for m in manchas],
-        "lat": [p.y for p in puntos_repr],
-        "lon": [p.x for p in puntos_repr],
-    })
-    df_puntos = asignar_distritos(df_puntos, distritos, col_lat="lat", col_lon="lon")
-    info_por_nombre = df_puntos.set_index("nombre")[
-        ["distrito", "canton", "provincia", "codigo_dta"]
-    ].to_dict("index")
+    tolerancia_deg = (tolerancia_m / METROS_POR_GRADO) if tolerancia_m > 0 else 0
+    geoms_distritos = [d["geometry"] for d in distritos]
+    tree = STRtree(geoms_distritos)
 
-    manchas_enriquecidas = []
+    piezas = []
     for m in manchas:
-        info = info_por_nombre.get(m["nombre"], {})
-        m2 = dict(m)
-        m2["distrito"] = info.get("distrito")
-        m2["canton"] = info.get("canton")
-        m2["provincia"] = info.get("provincia")
-        m2["codigo_dta"] = info.get("codigo_dta")
-        manchas_enriquecidas.append(m2)
-    return manchas_enriquecidas
+        candidatos_idx = tree.query(m["geometry"], predicate="intersects")
+        alguna_pieza = False
+        for i_dist in candidatos_idx:
+            d = distritos[i_dist]
+            try:
+                interseccion = m["geometry"].intersection(d["geometry"])
+            except Exception:
+                continue
+            if interseccion.is_empty or interseccion.area <= 0:
+                continue
+            # Una interseccion entre 2 poligonos deberia dar Polygon o
+            # MultiPolygon: si por bordes casi-coincidentes da una
+            # GeometryCollection mixta (con lineas/puntos degenerados
+            # mezclados), se rescatan solo las partes poligonales.
+            if interseccion.geom_type not in ("Polygon", "MultiPolygon"):
+                if interseccion.geom_type == "GeometryCollection":
+                    polys = [g for g in interseccion.geoms if g.geom_type in ("Polygon", "MultiPolygon")]
+                    if not polys:
+                        continue
+                    interseccion = polys[0] if len(polys) == 1 else MultiPolygon(polys)
+                else:
+                    continue
+            geo_simplificado = (
+                interseccion.simplify(tolerancia_deg, preserve_topology=True)
+                if tolerancia_deg > 0 else interseccion
+            )
+            piezas.append({
+                "nombre": m["nombre"],
+                "geometry": interseccion,
+                "geo": mapping(geo_simplificado),
+                "distrito": d["distrito"],
+                "canton": d["canton"],
+                "provincia": d["provincia"],
+                "codigo_dta": d["codigo_dta"],
+            })
+            alguna_pieza = True
+        if not alguna_pieza:
+            piezas.append(dict(m, distrito=None, canton=None, provincia=None, codigo_dta=None))
+    return piezas
 
 
 def _parse_coordenadas_kml(texto_coordenadas):
@@ -1459,11 +1490,15 @@ operador_sel = st.sidebar.multiselect(
 if "racsa_simplif_manchas_m" not in st.session_state:
     st.session_state["racsa_simplif_manchas_m"] = 30
 manchas_kmz = cargar_manchas_kmz(KMZ_MANCHAS_PATH, tolerancia_m=st.session_state["racsa_simplif_manchas_m"])
-# Se ubica cada mancha en su distrito (usa el mismo WFS/spatial join que el
-# resto de la app) SOLO para poder mostrarlo en el tooltip del mapa -- no
-# afecta el filtro de radiobases (manchas_con_muestras sigue usando
-# unicamente "geometry"/"nombre").
-manchas_kmz = asignar_distrito_a_manchas(manchas_kmz, distritos)
+# Para el tooltip del mapa, cada mancha se SUBDIVIDE segun los distritos con
+# los que se solapa (interseccion geometrica real, no un unico punto
+# representativo) -- ver docstring de dividir_manchas_por_distrito. Esta
+# version subdividida (manchas_kmz_tooltip) es SOLO para dibujar/tooltip;
+# manchas_kmz (sin dividir) se sigue usando para todo lo demas (conteo en el
+# sidebar, filtro de radiobases por nombre de mancha via manchas_con_muestras).
+manchas_kmz_tooltip = dividir_manchas_por_distrito(
+    manchas_kmz, distritos, tolerancia_m=st.session_state["racsa_simplif_manchas_m"]
+)
 radiobases_df, radiobases_descartadas = cargar_radiobases(RADIOBASES_XLSX_PATH)
 
 st.sidebar.markdown("---")
@@ -1714,7 +1749,7 @@ else:
     mapa = construir_mapa(
         distritos, conteo_por_distrito, df_puntos=df_filtrado, mostrar_puntos=mostrar_puntos,
         bounds=bounds_seleccion, distritos_resaltados=nombres_resaltados, paleta=paleta_mapa,
-        manchas=manchas_kmz, mostrar_manchas=mostrar_manchas,
+        manchas=manchas_kmz_tooltip, mostrar_manchas=mostrar_manchas,
         radiobases=radiobases_a_dibujar, mostrar_radiobases=mostrar_radiobases,
     )
     # components.html (en vez de st_folium) evita el puente bidireccional JS<->Python
