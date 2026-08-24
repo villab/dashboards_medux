@@ -1622,7 +1622,7 @@ programas = st.sidebar.multiselect(
     "Selecciona programs",
     [
         "network", "ping-test", "http-down-burst-test", "http-upload-burst-test",
-        "cloud-download", "cloud-upload", "youtube-api", "dropbox-get","confess-chrome",,
+        "cloud-download", "cloud-upload", "youtube-api", "dropbox-get","confess-chrome",
     ],
     default=[
         "ping-test", "http-down-burst-test", "http-upload-burst-test",
