@@ -432,7 +432,7 @@ def resolver_ubicacion_sondas(api_url, headers, probes, ts_start, ts_end, distri
     if programas_muestra is None:
         programas_muestra = [
             "network", "ping-test", "http-down-burst-test", "http-upload-burst-test",
-            "voice-out", "voice-polqa", "sms-mo",
+            "cloud-download", "cloud-upload", "youtube-api", "dropbox-get","confess-chrome",
         ]
     body = {
         "tsStart": ts_start,
