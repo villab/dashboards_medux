@@ -663,22 +663,35 @@ def dividir_manchas_por_distrito(manchas, distritos, tolerancia_m=30):
     con ningun distrito cargado (por ejemplo si cae fuera de la cobertura
     del WFS), se deja igual -- sin subdividir, sin distrito -- para no
     perder el poligono del mapa.
+
+    RENDIMIENTO: se calcula la interseccion sobre la geometria YA
+    SIMPLIFICADA de cada mancha/distrito (reconstruida desde su "geo" con
+    shape(), el mismo GeoJSON liviano que ya se usa para dibujar) en vez de
+    la geometria de precision completa ("geometry"). Con los ~494 distritos
+    del WFS (varios con miles de vertices a precision completa) y los
+    poligonos densos del KMZ, calcular la interseccion exacta para cada par
+    candidato resultaba demasiado pesado -- suficiente para tumbar la app en
+    Streamlit Cloud (memoria/CPU mas limitadas que en desarrollo local). La
+    perdida de precision es irrelevante aqui: esta funcion solo define en
+    que zona el tooltip debe mostrar un distrito u otro.
     """
     if not manchas or not distritos:
         return manchas
 
     tolerancia_deg = (tolerancia_m / METROS_POR_GRADO) if tolerancia_m > 0 else 0
-    geoms_distritos = [d["geometry"] for d in distritos]
+    geoms_distritos = [shape(d["geo"]) for d in distritos]
+    geoms_manchas = [shape(m["geo"]) for m in manchas]
     tree = STRtree(geoms_distritos)
 
     piezas = []
-    for m in manchas:
-        candidatos_idx = tree.query(m["geometry"], predicate="intersects")
+    for m, geom_mancha in zip(manchas, geoms_manchas):
+        candidatos_idx = tree.query(geom_mancha, predicate="intersects")
         alguna_pieza = False
         for i_dist in candidatos_idx:
             d = distritos[i_dist]
+            geom_distrito = geoms_distritos[i_dist]
             try:
-                interseccion = m["geometry"].intersection(d["geometry"])
+                interseccion = geom_mancha.intersection(geom_distrito)
             except Exception:
                 continue
             if interseccion.is_empty or interseccion.area <= 0:
@@ -712,6 +725,31 @@ def dividir_manchas_por_distrito(manchas, distritos, tolerancia_m=30):
         if not alguna_pieza:
             piezas.append(dict(m, distrito=None, canton=None, provincia=None, codigo_dta=None))
     return piezas
+
+
+@st.cache_data(ttl=60 * 60 * 24, show_spinner="Calculando manchas x distrito (una sola vez)...")
+def calcular_manchas_tooltip(tolerancia_manchas_m, tolerancia_distritos_m):
+    """Wrapper CACHEADO de dividir_manchas_por_distrito.
+
+    dividir_manchas_por_distrito recibe listas de dicts con objetos shapely
+    (no son argumentos "baratos" de hashear/comparar para @st.cache_data),
+    asi que en vez de decorar esa funcion directamente, este wrapper toma
+    solo los 2 numeros de los que en realidad depende el resultado
+    (tolerancia de simplificacion de manchas y de distritos) y vuelve a
+    pedir manchas/distritos a sus propios loaders cacheados (cargar_
+    manchas_kmz / cargar_distritos_wfs) -- practicamente gratis si ya
+    corrieron antes con esos mismos parametros.
+
+    Esto importa porque, sin cache, dividir_manchas_por_distrito se volvia
+    a ejecutar en CADA rerun de Streamlit (cada click, cada cambio de
+    filtro/fecha) -- ademas de ser el calculo mas pesado de esta pagina, en
+    Streamlit Cloud (memoria/CPU compartidas, mas limitadas que en
+    desarrollo local) repetirlo en cada interaccion era suficiente para que
+    la app se quedara sin responder y el healthcheck la tumbara.
+    """
+    manchas = cargar_manchas_kmz(KMZ_MANCHAS_PATH, tolerancia_m=tolerancia_manchas_m)
+    distritos_locales = cargar_distritos_wfs(tolerancia_distritos_m)
+    return dividir_manchas_por_distrito(manchas, distritos_locales, tolerancia_m=tolerancia_manchas_m)
 
 
 def _parse_coordenadas_kml(texto_coordenadas):
@@ -1537,8 +1575,10 @@ manchas_kmz = cargar_manchas_kmz(KMZ_MANCHAS_PATH, tolerancia_m=st.session_state
 # version subdividida (manchas_kmz_tooltip) es SOLO para dibujar/tooltip;
 # manchas_kmz (sin dividir) se sigue usando para todo lo demas (conteo en el
 # sidebar, filtro de radiobases por nombre de mancha via manchas_con_muestras).
-manchas_kmz_tooltip = dividir_manchas_por_distrito(
-    manchas_kmz, distritos, tolerancia_m=st.session_state["racsa_simplif_manchas_m"]
+# calcular_manchas_tooltip esta CACHEADO (24h) -- el calculo de
+# intersecciones no se repite en cada rerun de Streamlit (ver su docstring).
+manchas_kmz_tooltip = calcular_manchas_tooltip(
+    st.session_state["racsa_simplif_manchas_m"], st.session_state["poly_simplificacion_m"]
 )
 radiobases_df, radiobases_descartadas = cargar_radiobases(RADIOBASES_XLSX_PATH)
 
