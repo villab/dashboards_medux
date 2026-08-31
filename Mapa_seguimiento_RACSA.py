@@ -432,7 +432,7 @@ def resolver_ubicacion_sondas(api_url, headers, probes, ts_start, ts_end, distri
     if programas_muestra is None:
         programas_muestra = [
             "network", "ping-test", "http-down-burst-test", "http-upload-burst-test",
-            "cloud-download", "cloud-upload", "youtube-api", "dropbox-get","confess-chrome",
+            "voice-out", "voice-polqa", "sms-mo",
         ]
     body = {
         "tsStart": ts_start,
@@ -657,12 +657,13 @@ def dividir_manchas_por_distrito(manchas, distritos, tolerancia_m=30):
     asi que el tooltip SI cambia segun la posicion real del cursor.
 
     Devuelve una lista de "piezas": una por cada interseccion
-    (mancha, distrito) con area > 0, con las mismas claves que una mancha
-    normal (nombre, geometry, geo) mas distrito/canton/provincia/codigo_dta
-    ya resueltos para ESA pieza en particular. Si una mancha no se solapa
-    con ningun distrito cargado (por ejemplo si cae fuera de la cobertura
-    del WFS), se deja igual -- sin subdividir, sin distrito -- para no
-    perder el poligono del mapa.
+    (mancha, distrito) con area > 0, con las mismas claves "nombre"/"geo"
+    que una mancha normal (OJO: ya NO incluye "geometry" -- ver nota de
+    MEMORIA abajo) mas distrito/canton/provincia/codigo_dta ya resueltos
+    para ESA pieza en particular. Si una mancha no se solapa con ningun
+    distrito cargado (por ejemplo si cae fuera de la cobertura del WFS), se
+    deja igual -- sin subdividir, sin distrito -- para no perder el
+    poligono del mapa.
 
     RENDIMIENTO: se calcula la interseccion sobre la geometria YA
     SIMPLIFICADA de cada mancha/distrito (reconstruida desde su "geo" con
@@ -670,61 +671,113 @@ def dividir_manchas_por_distrito(manchas, distritos, tolerancia_m=30):
     la geometria de precision completa ("geometry"). Con los ~494 distritos
     del WFS (varios con miles de vertices a precision completa) y los
     poligonos densos del KMZ, calcular la interseccion exacta para cada par
-    candidato resultaba demasiado pesado -- suficiente para tumbar la app en
-    Streamlit Cloud (memoria/CPU mas limitadas que en desarrollo local). La
-    perdida de precision es irrelevante aqui: esta funcion solo define en
-    que zona el tooltip debe mostrar un distrito u otro.
+    candidato resultaba demasiado pesado.
+
+    MEMORIA / ROBUSTEZ (agregado despues de que la app se cayera en
+    Streamlit Cloud incluso con la optimizacion de arriba, probablemente
+    por presion de memoria del contenedor compartido):
+    - Los resultados NO guardan el objeto shapely "geometry" de cada pieza
+      (solo el "geo" ya mapeado a dict/GeoJSON, que es lo unico que usa
+      construir_mapa para dibujar) -- con potencialmente cientos de piezas
+      esto reduce el uso de memoria a la mitad o mas.
+    - Hay un limite duro de pares (mancha, distrito candidato) a procesar
+      (MAX_PARES_INTERSECCION); si se supera, se corta ahi y las manchas
+      restantes quedan SIN subdividir (mismo fallback que "no se solapa con
+      ningun distrito") en vez de seguir consumiendo memoria/CPU sin limite.
+    - Antes de intersectar se valida la geometria (buffer(0) si no es
+      valida) -- geometrias invalidas son una causa conocida de calculos
+      de interseccion excesivamente lentos o costosos en GEOS.
+    - TODA la funcion esta envuelta en un try/except: si algo sale mal de
+      forma inesperada con datos reales (topologia rara, etc.), se hace
+      st.warning() y se devuelve 'manchas' SIN modificar (la app sigue
+      funcionando, el tooltip de manchas simplemente no muestra el
+      desglose por distrito) en vez de propagar la excepcion y tumbar la
+      app -- esta funcion es una mejora de UX, nunca deberia poder romper
+      el mapa completo.
     """
     if not manchas or not distritos:
         return manchas
 
-    tolerancia_deg = (tolerancia_m / METROS_POR_GRADO) if tolerancia_m > 0 else 0
-    geoms_distritos = [shape(d["geo"]) for d in distritos]
-    geoms_manchas = [shape(m["geo"]) for m in manchas]
-    tree = STRtree(geoms_distritos)
+    MAX_PARES_INTERSECCION = 4000
 
-    piezas = []
-    for m, geom_mancha in zip(manchas, geoms_manchas):
-        candidatos_idx = tree.query(geom_mancha, predicate="intersects")
-        alguna_pieza = False
-        for i_dist in candidatos_idx:
-            d = distritos[i_dist]
-            geom_distrito = geoms_distritos[i_dist]
-            try:
-                interseccion = geom_mancha.intersection(geom_distrito)
-            except Exception:
+    def _geom_valida(g):
+        try:
+            return g if g.is_valid else g.buffer(0)
+        except Exception:
+            return g
+
+    try:
+        tolerancia_deg = (tolerancia_m / METROS_POR_GRADO) if tolerancia_m > 0 else 0
+        geoms_distritos = [_geom_valida(shape(d["geo"])) for d in distritos]
+        geoms_manchas = [_geom_valida(shape(m["geo"])) for m in manchas]
+        tree = STRtree(geoms_distritos)
+
+        piezas = []
+        pares_procesados = 0
+        limite_alcanzado = False
+        for m, geom_mancha in zip(manchas, geoms_manchas):
+            if limite_alcanzado:
+                piezas.append(dict(nombre=m["nombre"], geo=m["geo"],
+                                    distrito=None, canton=None, provincia=None, codigo_dta=None))
                 continue
-            if interseccion.is_empty or interseccion.area <= 0:
-                continue
-            # Una interseccion entre 2 poligonos deberia dar Polygon o
-            # MultiPolygon: si por bordes casi-coincidentes da una
-            # GeometryCollection mixta (con lineas/puntos degenerados
-            # mezclados), se rescatan solo las partes poligonales.
-            if interseccion.geom_type not in ("Polygon", "MultiPolygon"):
-                if interseccion.geom_type == "GeometryCollection":
-                    polys = [g for g in interseccion.geoms if g.geom_type in ("Polygon", "MultiPolygon")]
-                    if not polys:
-                        continue
-                    interseccion = polys[0] if len(polys) == 1 else MultiPolygon(polys)
-                else:
+
+            candidatos_idx = tree.query(geom_mancha, predicate="intersects")
+            alguna_pieza = False
+            for i_dist in candidatos_idx:
+                pares_procesados += 1
+                if pares_procesados > MAX_PARES_INTERSECCION:
+                    limite_alcanzado = True
+                    st.warning(
+                        "⚠️ Se alcanzo el limite de seguridad al calcular el detalle por "
+                        "distrito de las manchas KMZ -- el tooltip de las manchas restantes "
+                        "no mostrara el desglose por distrito (el resto de la app sigue "
+                        "funcionando normal)."
+                    )
+                    break
+                d = distritos[i_dist]
+                geom_distrito = geoms_distritos[i_dist]
+                try:
+                    interseccion = geom_mancha.intersection(geom_distrito)
+                except Exception:
                     continue
-            geo_simplificado = (
-                interseccion.simplify(tolerancia_deg, preserve_topology=True)
-                if tolerancia_deg > 0 else interseccion
-            )
-            piezas.append({
-                "nombre": m["nombre"],
-                "geometry": interseccion,
-                "geo": mapping(geo_simplificado),
-                "distrito": d["distrito"],
-                "canton": d["canton"],
-                "provincia": d["provincia"],
-                "codigo_dta": d["codigo_dta"],
-            })
-            alguna_pieza = True
-        if not alguna_pieza:
-            piezas.append(dict(m, distrito=None, canton=None, provincia=None, codigo_dta=None))
-    return piezas
+                if interseccion.is_empty or interseccion.area <= 0:
+                    continue
+                # Una interseccion entre 2 poligonos deberia dar Polygon o
+                # MultiPolygon: si por bordes casi-coincidentes da una
+                # GeometryCollection mixta (con lineas/puntos degenerados
+                # mezclados), se rescatan solo las partes poligonales.
+                if interseccion.geom_type not in ("Polygon", "MultiPolygon"):
+                    if interseccion.geom_type == "GeometryCollection":
+                        polys = [g for g in interseccion.geoms if g.geom_type in ("Polygon", "MultiPolygon")]
+                        if not polys:
+                            continue
+                        interseccion = polys[0] if len(polys) == 1 else MultiPolygon(polys)
+                    else:
+                        continue
+                geo_simplificado = (
+                    interseccion.simplify(tolerancia_deg, preserve_topology=True)
+                    if tolerancia_deg > 0 else interseccion
+                )
+                piezas.append({
+                    "nombre": m["nombre"],
+                    "geo": mapping(geo_simplificado),
+                    "distrito": d["distrito"],
+                    "canton": d["canton"],
+                    "provincia": d["provincia"],
+                    "codigo_dta": d["codigo_dta"],
+                })
+                alguna_pieza = True
+            if not alguna_pieza:
+                piezas.append(dict(nombre=m["nombre"], geo=m["geo"],
+                                    distrito=None, canton=None, provincia=None, codigo_dta=None))
+        return piezas
+    except Exception as e:
+        st.warning(
+            f"⚠️ No se pudo calcular el desglose por distrito de las manchas KMZ "
+            f"({type(e).__name__}) -- el tooltip de manchas se muestra sin distrito, "
+            f"el resto de la app sigue funcionando normal."
+        )
+        return manchas
 
 
 @st.cache_data(ttl=60 * 60 * 24, show_spinner="Calculando manchas x distrito (una sola vez)...")
@@ -747,9 +800,17 @@ def calcular_manchas_tooltip(tolerancia_manchas_m, tolerancia_distritos_m):
     desarrollo local) repetirlo en cada interaccion era suficiente para que
     la app se quedara sin responder y el healthcheck la tumbara.
     """
-    manchas = cargar_manchas_kmz(KMZ_MANCHAS_PATH, tolerancia_m=tolerancia_manchas_m)
-    distritos_locales = cargar_distritos_wfs(tolerancia_distritos_m)
-    return dividir_manchas_por_distrito(manchas, distritos_locales, tolerancia_m=tolerancia_manchas_m)
+    try:
+        manchas = cargar_manchas_kmz(KMZ_MANCHAS_PATH, tolerancia_m=tolerancia_manchas_m)
+        distritos_locales = cargar_distritos_wfs(tolerancia_distritos_m)
+        return dividir_manchas_por_distrito(manchas, distritos_locales, tolerancia_m=tolerancia_manchas_m)
+    except Exception as e:
+        st.warning(
+            f"⚠️ No se pudo calcular el desglose por distrito de las manchas KMZ "
+            f"({type(e).__name__}) -- el tooltip de manchas se muestra sin distrito, "
+            f"el resto de la app sigue funcionando normal."
+        )
+        return cargar_manchas_kmz(KMZ_MANCHAS_PATH, tolerancia_m=tolerancia_manchas_m)
 
 
 def _parse_coordenadas_kml(texto_coordenadas):
@@ -1102,7 +1163,12 @@ def construir_mapa(distritos, conteo_por_distrito, df_puntos=None, mostrar_punto
     # prefer_canvas=True: los puntos se dibujan en un solo <canvas> en vez de
     # un nodo SVG por marcador -- clave para poder mostrar miles de muestras
     # sin que el navegador se ponga lento al hacer pan/zoom.
-    m = folium.Map(location=[9.7489, -83.7534], zoom_start=8, tiles="cartodbpositron", prefer_canvas=True)
+    # NOTA: "cartodbpositron" (el basemap gris claro que se usaba antes) dejo
+    # de servirse sin autenticacion -- CartoDB ahora exige una API key para
+    # sus tiles raster gratuitos (los tiles empezaron a salir con la marca
+    # de agua "API KEY REQUIRED"). "OpenStreetMap" es el basemap incluido en
+    # folium que sigue siendo 100% gratuito y sin necesidad de API key.
+    m = folium.Map(location=[9.7489, -83.7534], zoom_start=8, tiles="OpenStreetMap", prefer_canvas=True)
 
     distritos_resaltados = distritos_resaltados or set()
     max_count = max(conteo_por_distrito.values(), default=0)
@@ -1621,12 +1687,12 @@ st.sidebar.header("Tipos de prueba (programs)")
 programas = st.sidebar.multiselect(
     "Selecciona programs",
     [
-        "network", "ping-test", "http-down-burst-test", "http-upload-burst-test",
-        "cloud-download", "cloud-upload", "youtube-api", "dropbox-get","confess-chrome",
+        "http-down-burst-test", "http-upload-burst-test", "ping-test", "network",
+        "voice-out", "voice-polqa", "sms-mo",
     ],
     default=[
         "ping-test", "http-down-burst-test", "http-upload-burst-test",
-        "cloud-download", "cloud-upload", "youtube-api", "dropbox-get","confess-chrome",
+        "voice-out", "voice-polqa", "sms-mo",
     ],
 )
 
